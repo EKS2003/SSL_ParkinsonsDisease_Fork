@@ -86,6 +86,7 @@ class Patient:
         )
 
 
+#Refacto to sqlite
 class PatientManager:
     # Class lock for async operations
     _lock = asyncio.Lock()
