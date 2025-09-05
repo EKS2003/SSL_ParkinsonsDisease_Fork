@@ -5,7 +5,7 @@ This project is part of the Smart Systems Laboratory at the University of Florid
 
 ## Run Locally
 
-Clone the project
+Clone the project 
 
 ```bash
 git clone https://github.com/aaronbesc/SSL_ParkinsonsDisease
