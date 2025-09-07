@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from typing import Dict, List, Optional
 from pydantic import BaseModel, Field
-from datetime import datetime
+from datetime import datetime,date
 import os
 import shutil
 import uvicorn
@@ -106,7 +106,7 @@ async def health_check():
     return {"status": "healthy", "message": "API is running"}
 
 
-@app.post("/patients/", response_model=PatientResponse)
+@app.post("/patients/", status_code=201, response_model=PatientResponse)
 async def create_patient(payload: PatientCreate, db: Session = Depends(get_db)):
     # Convert types to match async_create_patient signature
     # Handle height conversion - try to convert to float, keep as string if it fails
@@ -146,7 +146,11 @@ async def get_patients(
 ):
     repo = PatientRepository(db)
     patients = repo.list(skip=skip, limit=limit)
-    return patients
+    return PatientsListResponse(
+        success=True,
+        patients=patients,
+        total=len(patients)
+        )
 
 @app.get("/patients/{patient_id}", response_model=PatientResponse)
 async def get_patient(patient_id: str, db: Session = Depends(get_db)):
@@ -167,7 +171,7 @@ async def update_patient(patient_id: str, patient_update: PatientUpdate, db: Ses
     return patient
 
 
-@app.delete("/patients/{patient_id}")
+@app.delete("/patients/{patient_id}", status_code=204)
 def delete_patient(
     patient_id: str, db: Session = Depends(get_db)
 ) -> None:
