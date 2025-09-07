@@ -8,21 +8,30 @@ import os
 import shutil
 import uvicorn
 from subprocess import run, PIPE
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker, Session
+
+from repo.patient_repository import PatientRepository
+from repo.sql_models import Base, Patient
 
 # setting up recording directory
 RECORDINGS_DIR = os.path.join(os.path.dirname(__file__), "recordings")
 os.makedirs(RECORDINGS_DIR, exist_ok=True)
 
-# Import from your patient_manager module
-from patient_manager import (
-    Patient, PatientManager,
-    async_create_patient, async_get_patient_info,
-    async_update_patient_info, async_delete_patient_record,
-    async_get_all_patients_info, async_search_patients,
-    async_filter_patients,
-    TestHistoryManager
-)
+# SQLAlchemy session setup
 
+engine = create_engine("sqlite:///./test.db", echo=True, future=True)
+SessionLocal = sessionmaker(bind=engine)
+
+def get_db():
+    db = SessionLocal()
+    try: 
+        yield db
+    finally:
+        db.close()
+
+
+#FastAPI app setup
 app = FastAPI(title="Patient Management API")
 
 # Configure CORS to allow frontend to connect
@@ -45,35 +54,26 @@ app.add_middleware(
 
 
 # Pydantic models for request/response validation
-class PatientCreate(BaseModel):
-    name: str
-    age: int = Field(..., ge=0, le=120)
-    height: str = Field(..., min_length=1)
-    weight: str = Field(..., min_length=1)
-    lab_results: Optional[Dict] = Field(default_factory=dict)
-    doctors_notes: Optional[str] = ""
-    severity: str = Field("low", pattern="^(low|medium|high)$")
-
-
-class PatientUpdate(BaseModel):
+class PatientBase(BaseModel):
     name: Optional[str] = None
-    age: Optional[int] = Field(None, ge=0, le=120)
-    height: Optional[str] = None
-    weight: Optional[str] = None
-    lab_results: Optional[Dict] = None
-    doctors_notes: Optional[str] = None
-    severity: Optional[str] = Field(None, pattern="^(low|medium|high)$")
+    dob: Optional[date] = None
+    height: Optional[int] = None
+    weight: Optional[int] = None
 
 
-class PatientResponse(BaseModel):
+class PatientCreate(PatientBase):
     patient_id: str
-    name: str
-    age: int
-    height: str  # Changed to str to handle existing data
-    weight: str  # Changed to str to handle existing data
-    lab_results: Dict
-    doctors_notes: str
-    severity: str
+
+class PatientUpdate(PatientBase):
+    pass
+
+
+
+class PatientResponse(PatientBase):
+    patient_id: str
+    class Config:
+        orm_mode = True
+
 
 
 class PatientsListResponse(BaseModel):
@@ -106,90 +106,77 @@ async def health_check():
     return {"status": "healthy", "message": "API is running"}
 
 
-@app.post("/patients/", response_model=Dict)
-async def create_patient(patient: PatientCreate):
+@app.post("/patients/", response_model=PatientResponse)
+async def create_patient(payload: PatientCreate, db: Session = Depends(get_db)):
     # Convert types to match async_create_patient signature
     # Handle height conversion - try to convert to float, keep as string if it fails
     try:
-        height = float(patient.height) if patient.height is not None else 0.0
+        height = float(payload.height) if payload.height is not None else 0.0
     except ValueError:
         height = 0.0  # Default if conversion fails
     
     # Handle weight conversion - try to convert to float, keep as string if it fails
     try:
-        weight = float(patient.weight) if patient.weight is not None else 0.0
+        weight = float(payload.weight) if payload.weight is not None else 0.0
     except ValueError:
         weight = 0.0  # Default if conversion fails
-    
-    lab_results = patient.lab_results if patient.lab_results is not None else {}
-    doctors_notes = patient.doctors_notes if patient.doctors_notes is not None else ""
-    result = await async_create_patient(
-        name=patient.name,
-        age=patient.age,
-        height=height,
-        weight=weight,
-        lab_results=lab_results,
-        doctors_notes=doctors_notes,
-        severity=patient.severity
+        
+    repo = PatientRepository(db)
+
+    patient = Patient(
+        patient_id=payload.patient_id,
+        name=payload.name,
+        dob=payload.dob,  # DOB not provided in PatientCreate
+        height=int(height) if isinstance(height, float) else None,
+        weight=int(weight) if isinstance(weight, float) else None,
     )
-
-    if not result.get("success", False):
-        raise HTTPException(status_code=400, detail=result.get("error", "Failed to create patient"))
-
-    return result
+    try:
+        created_patient = repo.add(patient)
+        return created_patient
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=400, detail=str(e))
 
 
 @app.get("/patients/", response_model=PatientsListResponse)
 async def get_patients(
         skip: int = Query(0, ge=0),
-        limit: int = Query(100, ge=1, le=1000)
+        limit: int = Query(100, ge=1, le=1000),
+        db: Session = Depends(get_db)
 ):
-    return await async_get_all_patients_info(skip, limit)
+    repo = PatientRepository(db)
+    patients = repo.list(skip=skip, limit=limit)
+    return patients
 
-
-@app.get("/patients/{patient_id}", response_model=Dict)
-async def get_patient(patient_id: str):
-    result = await async_get_patient_info(patient_id)
-
-    if not result.get("success", False):
+@app.get("/patients/{patient_id}", response_model=PatientResponse)
+async def get_patient(patient_id: str, db: Session = Depends(get_db)):
+    repo = PatientRepository(db)
+    patient = repo.get(patient_id)
+    if not patient:
         raise HTTPException(status_code=404, detail="Patient not found")
+    return patient
 
-    return result
 
-
-@app.put("/patients/{patient_id}", response_model=Dict)
-async def update_patient(patient_id: str, patient_update: PatientUpdate):
+@app.put("/patients/{patient_id}", response_model=PatientResponse)
+async def update_patient(patient_id: str, patient_update: PatientUpdate, db: Session = Depends(get_db)):
     # Convert Pydantic model to dict, excluding None values
-    update_data = {k: v for k, v in patient_update.dict().items() if v is not None}
-    
-    print(f"Update request for patient {patient_id}")
-    print(f"Update data received: {update_data}")
-
-    if not update_data:
-        raise HTTPException(status_code=400, detail="No valid update data provided")
-
-    result = await async_update_patient_info(patient_id, update_data)
-    
-    print(f"Update result: {result}")
-
-    if not result.get("success", False):
-        if "errors" in result:
-            raise HTTPException(status_code=400, detail=result["errors"])
-        raise HTTPException(status_code=404, detail=result.get("error", "Failed to update patient"))
-
-    return result
+    repo = PatientRepository(db)
+    patient = repo.update(patient_id, patient_update.model_dump(exclude_unset=True))
+    if patient is None:
+        raise HTTPException(status_code=404, detail="Patient not found")
+    return patient
 
 
-@app.delete("/patients/{patient_id}", response_model=Dict)
-async def delete_patient(patient_id: str):
-    result = await async_delete_patient_record(patient_id)
-
-    if not result.get("success", False):
+@app.delete("/patients/{patient_id}")
+def delete_patient(
+    patient_id: str, db: Session = Depends(get_db)
+) -> None:
+    repo = PatientRepository(db)
+    success = repo.delete(patient_id)
+    if not success:
         raise HTTPException(status_code=404, detail="Patient not found")
 
-    return result
-
-
+'''
 @app.get("/patients/search/{query}", response_model=PatientSearchResponse)
 async def search_patients_endpoint(query: str):
     return await async_search_patients(query)
@@ -198,7 +185,7 @@ async def search_patients_endpoint(query: str):
 @app.post("/patients/filter/", response_model=PatientSearchResponse)
 async def filter_patients_endpoint(criteria: FilterCriteria):
     return await async_filter_patients(criteria.dict(exclude_none=True))
-
+'''
 
 if __name__ == "__main__":
     uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
