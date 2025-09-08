@@ -14,6 +14,8 @@ RUN pip install uvicorn
 
 RUN pip install python-multipart
 
+RUN pip install sqlalchemy
+
 COPY . .
 
 ENV port = 8000

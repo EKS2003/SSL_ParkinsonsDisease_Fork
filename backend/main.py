@@ -14,6 +14,8 @@ from sqlalchemy.orm import sessionmaker, Session
 from repo.patient_repository import PatientRepository
 from repo.sql_models import Base, Patient
 
+from test_history_manager import TestHistoryManager
+
 # setting up recording directory
 RECORDINGS_DIR = os.path.join(os.path.dirname(__file__), "recordings")
 os.makedirs(RECORDINGS_DIR, exist_ok=True)
