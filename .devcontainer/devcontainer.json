@@ -1,0 +1,18 @@
+{
+  "name": "App container",
+  "dockerComposeFile": "/docker-compose.yml",
+
+  "service": "frontend", //backend or frontend, not both
+  "workspaceFolder": "/app",
+  "overrideCommand": false,
+  "runServices": ["frontend", "backend"],
+  "shutdownAction": "stopCompose",
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "dbaeumer.vscode-eslint",
+        "esbenp.prettier-vscode"
+      ]
+    }
+  }
+}
