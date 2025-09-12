@@ -1,6 +1,7 @@
 from typing import Optional, List, Dict, Any
 from sqlalchemy.orm import Session
 from repo.sql_models import Patient
+from ..main import FilterCriteria, PatientSearchResponse
 
 class PatientRepository:
     def __init__(self, session: Session) -> None:
@@ -42,5 +43,20 @@ class PatientRepository:
             .limit(limit)
             .all()
         )
+    
+    def filter(criteria: FilterCriteria) -> PatientSearchResponse:
+        query = self.session.query(Patient)
+        if criteria.name:
+            query = query.filter(Patient.name.ilike(f"%{criteria.name}%"))
+        if criteria.min_age:
+            # Assuming dob is stored as a date, calculate the cutoff date
+            from datetime import date, timedelta
+            cutoff_date = date.today() - timedelta(days=criteria.min_age * 365.25)
+            query = query.filter(Patient.dob <= cutoff_date)
+        if criteria.max_age:
+            from datetime import date, timedelta
+            cutoff_date = date.today() - timedelta(days=criteria.max_age * 365.25)
+            query = query.filter(Patient.dob >= cutoff_date)
+        return query.all()
 
 # Add more methods as needed for complex queries, filtering, etc.

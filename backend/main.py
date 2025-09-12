@@ -56,6 +56,7 @@ app.add_middleware(
 
 
 # Pydantic models for request/response validation
+#Metric units: height in cm, weight in kg
 class PatientBase(BaseModel):
     name: Optional[str] = None
     dob: Optional[date] = None
@@ -69,14 +70,10 @@ class PatientCreate(PatientBase):
 class PatientUpdate(PatientBase):
     pass
 
-
-
 class PatientResponse(PatientBase):
     patient_id: str
     class Config:
         orm_mode = True
-
-
 
 class PatientsListResponse(BaseModel):
     success: bool
@@ -85,18 +82,15 @@ class PatientsListResponse(BaseModel):
     skip: int
     limit: int
 
-
 class PatientSearchResponse(BaseModel):
     success: bool
     patients: List[PatientResponse]
     count: int
 
-
 class FilterCriteria(BaseModel):
     min_age: Optional[int] = None
     max_age: Optional[int] = None
     severity: Optional[str] = None
-
 
 # API Routes
 @app.get("/")
@@ -268,6 +262,7 @@ async def start_test(patient_id: str = Form(...), test_name: str = Form(...)):
     except Exception as e:
         return {"success": False, "error": str(e)}
 
+## Frontend -> Backend() -> Frontend 
 @app.get("/patients/{patient_id}/tests", response_model=Dict)
 async def get_patient_tests(patient_id: str):
     thm = TestHistoryManager()
@@ -279,3 +274,23 @@ async def add_patient_test(patient_id: str, test_data: dict = Body(...)):
     thm = TestHistoryManager()
     thm.add_patient_test(patient_id, test_data)
     return {"success": True}
+
+'''
+@app.post("/visit/", response_model=Dict)
+async def create_visit(patient_id: str, visit_data: dict = Body(...), db: Session = Depends(get_db)):
+    repo = PatientRepository(db)
+    patient = repo.get(patient_id)
+    if not patient:
+        raise HTTPException(status_code=404, detail="Patient not found")
+    
+    if 'visits' not in patient.__dict__ or patient.visits is None:
+        patient.visits = []
+    
+    patient.visits.append(visit_data)
+    try:
+        repo.update(patient_id, {"visits": patient.visits})
+        return {"success": True, "visits": patient.visits}
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=400, detail=str(e))
+'''
