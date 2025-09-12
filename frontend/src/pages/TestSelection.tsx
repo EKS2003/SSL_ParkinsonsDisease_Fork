@@ -8,6 +8,7 @@ import { Separator } from '@/components/ui/separator';
 import { useToast } from '@/hooks/use-toast';
 import { Patient, Test, AVAILABLE_TESTS } from '@/types/patient';
 import apiService from '@/services/api';
+import { getSeverityColor, calculateAge } from '@/lib/utils';
 
 const TestSelection = () => {
   const { id } = useParams<{ id: string }>();
@@ -54,7 +55,7 @@ const TestSelection = () => {
     );
   };
 
-  const handleStartRecording = async () => {
+  const handleStartRecording = () => {
     if (selectedTests.length === 0) {
       toast({
         title: "No Tests Selected",
@@ -63,58 +64,12 @@ const TestSelection = () => {
       });
       return;
     }
-    setLoading(true);
-    let allSuccess = true;
-    for (const testId of selectedTests) {
-      try {
-        const formData = new FormData();
-        formData.append("patient_id", id || '');
-        formData.append("test_name", testId);
-        const response = await fetch("http://localhost:8000/start-test/", {
-          method: "POST",
-          body: formData,
-        });
-        const data = await response.json();
-        if (!data.success) {
-          allSuccess = false;
-          toast({
-            title: `Failed to start ${testId}`,
-            description: data.error || data.stderr || 'Unknown error',
-            variant: "destructive",
-          });
-        } else {
-          toast({
-            title: `Started ${testId} test`,
-            description: data.stdout ? data.stdout.slice(0, 200) : 'Test started.',
-          });
-        }
-      } catch (err) {
-        allSuccess = false;
-        toast({
-          title: `Error starting ${testId}`,
-          description: String(err),
-          variant: "destructive",
-        });
-      }
-    }
-    setLoading(false);
-    if (allSuccess) {
-      // Create a test session with selected tests
-      const testId = `test-${Date.now()}`;
-      navigate(`/patient/${id}/video-recording/${testId}`, {
-        state: { selectedTests }
-      });
-    }
-  };
 
-  const getSeverityColor = (severity: Patient['severity']) => {
-    switch (severity) {
-      case 'Mild': return 'bg-success text-success-foreground';
-      case 'Moderate': return 'bg-warning text-warning-foreground';
-      case 'Severe': return 'bg-destructive text-destructive-foreground';
-      default: return 'bg-muted text-muted-foreground';
-    }
-  };
+    const testId = `test-${Date.now()}`;
+    navigate(`/patient/${id}/video-recording/${testId}`, {
+    state: { selectedTests },
+  });
+  }
 
   if (loadingPatient) {
     return <div className="min-h-screen flex items-center justify-center">Loading patient data...</div>;
@@ -168,7 +123,7 @@ const TestSelection = () => {
                 </div>
                 <div>
                   <p className="text-sm font-medium text-muted-foreground">Age</p>
-                  <p className="font-semibold">{patient.age} years</p>
+                  <p className="font-semibold">{calculateAge(patient.birthDate)} years</p>
                 </div>
                 <div>
                   <p className="text-sm font-medium text-muted-foreground">Record Number</p>

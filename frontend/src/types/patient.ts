@@ -3,12 +3,12 @@ export interface Patient {
   firstName: string;
   lastName: string;
   recordNumber: string;
-  age: number;
+  birthDate: string;
   height: string;
   weight: string;
   labResults: string;
   doctorNotes: string;
-  severity: 'Mild' | 'Moderate' | 'Severe';
+  severity: 'Stage 1' | 'Stage 2' | 'Stage 3' | 'Stage 4' | 'Stage 5';
   createdAt: Date;
   updatedAt: Date;
 }

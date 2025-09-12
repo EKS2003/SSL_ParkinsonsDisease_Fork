@@ -1,10 +1,11 @@
+
 const API_BASE_URL = 'http://localhost:8000';
 
 // Types for backend API
 interface BackendPatient {
   patient_id: string;
   name: string;
-  age: number;
+  birthDate: string;
   height: number;
   weight: number;
   lab_results: Record<string, any>;
@@ -14,7 +15,7 @@ interface BackendPatient {
 
 interface BackendPatientCreate {
   name: string;
-  age: number;
+  birthDate: string;
   height: string;
   weight: string;
   lab_results?: Record<string, any>;
@@ -24,7 +25,7 @@ interface BackendPatientCreate {
 
 interface BackendPatientUpdate {
   name?: string;
-  age?: number;
+  birthDate?: string;
   height?: string;
   weight?: string;
   lab_results?: Record<string, any>;
@@ -51,7 +52,7 @@ const convertBackendToFrontend = (backendPatient: BackendPatient) => {
     firstName,
     lastName,
     recordNumber: backendPatient.patient_id || '', // Using patient_id as record number
-    age: backendPatient.age || 0,
+    birthDate: backendPatient.birthDate || 0,
     height: `${backendPatient.height || 0} cm`,
     weight: `${backendPatient.weight || 0} kg`,
     labResults: JSON.stringify(backendPatient.lab_results || {}),
@@ -71,7 +72,7 @@ const convertFrontendToBackend = (frontendPatient: any): BackendPatientCreate =>
   
   return {
     name: fullName,
-    age: frontendPatient.age,
+    birthDate: frontendPatient.birthDate,
     height: heightStr || '0', // Keep as string for create endpoint
     weight: weightStr || '0', // Keep as string for create endpoint
     lab_results: frontendPatient.labResults ? JSON.parse(frontendPatient.labResults) : {},
@@ -81,30 +82,38 @@ const convertFrontendToBackend = (frontendPatient: any): BackendPatientCreate =>
 };
 
 // Map severity from backend to frontend
-const mapSeverity = (backendSeverity: string): 'Mild' | 'Moderate' | 'Severe' => {
+export const mapSeverity = (backendSeverity: string): 'Stage 1' | 'Stage 2' | 'Stage 3' | 'Stage 4' | 'Stage 5' => {
   switch (backendSeverity.toLowerCase()) {
-    case 'low':
-      return 'Mild';
-    case 'medium':
-      return 'Moderate';
-    case 'high':
-      return 'Severe';
+    case 'Stage 1':
+      return 'Stage 1';
+    case 'Stage 2':
+      return 'Stage 2';
+    case 'Stage 3':
+      return 'Stage 3';
+    case 'Stage 4':
+      return 'Stage 4';
+    case 'Stage 5':
+      return 'Stage 5';
     default:
-      return 'Mild';
+      return 'Stage 1';
   }
 };
 
 // Map severity from frontend to backend
 const mapSeverityToBackend = (frontendSeverity: string): string => {
   switch (frontendSeverity) {
-    case 'Mild':
-      return 'low';
-    case 'Moderate':
-      return 'medium';
-    case 'Severe':
-      return 'high';
+    case 'Stage 1':
+      return 'Stage 1';
+    case 'Stage 2':
+      return 'Stage 2';
+    case 'Stage 3':
+      return 'Stage 3';
+    case 'Stage 4':
+      return 'Stage 4';
+    case 'Stage 5':
+      return 'Stage 5';
     default:
-      return 'low';
+      return 'Stage 1';
   }
 };
 
@@ -227,7 +236,7 @@ class ApiService {
       backendData.name = fullName;
     }
     
-    if (updateData.age !== undefined) backendData.age = updateData.age;
+    if (updateData.age !== undefined) backendData.birthDate = updateData.age;
     if (updateData.height) {
       const heightStr = updateData.height.replace(/[^\d.]/g, '');
       backendData.height = heightStr || '0';
@@ -254,7 +263,7 @@ class ApiService {
             console.log('Backend update data:', backendData);
         console.log('Data types:', {
           name: typeof backendData.name,
-          age: typeof backendData.age,
+          age: typeof backendData.birthDate,
           height: typeof backendData.height,
           weight: typeof backendData.weight,
           severity: typeof backendData.severity

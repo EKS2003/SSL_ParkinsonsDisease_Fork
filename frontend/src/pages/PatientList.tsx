@@ -13,6 +13,7 @@ import { useToast } from '@/hooks/use-toast';
 import { Patient } from '@/types/patient';
 import apiService from '@/services/api';
 import { useApiStatus } from '@/hooks/use-api-status';
+import { getSeverityColor } from '@/lib/utils';
 
 // Remove mock data - will be fetched from API
 
@@ -136,18 +137,7 @@ const PatientList = () => {
     }
   };
 
-  const getSeverityColor = (severity: Patient['severity']) => {
-    switch (severity) {
-      case 'Mild':
-        return 'bg-success text-success-foreground';
-      case 'Moderate':
-        return 'bg-warning text-warning-foreground';
-      case 'Severe':
-        return 'bg-destructive text-destructive-foreground';
-      default:
-        return 'bg-muted text-muted-foreground';
-    }
-  };
+  
 
   return (
     <div className="min-h-screen bg-background">
@@ -317,7 +307,7 @@ const PatientList = () => {
                     <div className="space-y-3">
                       <div className="flex items-center text-sm text-muted-foreground">
                         <FileText className="mr-2 h-4 w-4" />
-                        Age: {patient.age} years
+                        Age: {patient.birthDate} years
                       </div>
                       <div className="flex items-center text-sm text-muted-foreground">
                         <AlertCircle className="mr-2 h-4 w-4" />
