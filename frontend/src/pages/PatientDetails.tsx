@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState} from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { ArrowLeft, Plus, Calendar, FileText, Activity, Edit, Play } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -6,7 +6,13 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { Patient, Test } from '@/types/patient';
-
+import { getSeverityColor, calculateAge } from '@/lib/utils';
+import { mapSeverity } from '@/services/api';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, } from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
+import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select';
+import { Label } from '@/components/ui/label';
 
 // Mock data - replace with actual data fetching
 const mockPatient: Patient = {
@@ -14,12 +20,12 @@ const mockPatient: Patient = {
   firstName: 'John',
   lastName: 'Smith',
   recordNumber: 'P001',
-  age: 65,
+  birthDate: '1980-05-15',
   height: '5\'8"',
   weight: '170 lbs',
   labResults: 'Normal CBC, elevated dopamine markers, glucose 95 mg/dL',
   doctorNotes: 'Patient shows mild tremor in right hand. Responds well to L-DOPA treatment. Recommend continued monitoring and physical therapy.',
-  severity: 'Mild',
+  severity: 'Stage 1',
   createdAt: new Date('2024-01-15'),
   updatedAt: new Date('2024-01-20'),
 };
@@ -59,6 +65,31 @@ const PatientDetails = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [tests, setTests] = useState<Test[]>([]); // Placeholder – replace with real API if available
+  const [isEditOpen, setIsEditOpen] = useState(false);
+  const [editData, setEditData] = useState<Partial<Patient>>({});
+
+  const openForEdit = useCallback(() => {
+    if (!patient) return;
+    setEditData({
+      firstName: patient.firstName ?? "",
+      lastName: patient.lastName ?? "",
+      birthDate: patient.birthDate ?? "",
+      height: patient.height ?? "",
+      weight: patient.weight ?? "",
+      labResults: patient.labResults ?? "",
+      doctorNotes: patient.doctorNotes ?? "",
+      severity: (patient.severity as Patient["severity"]) ?? "Stage 1",
+    });
+    setIsEditOpen(true);
+  }, [patient]);
+
+  const handleEditSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!patient) return;
+    const updated: Patient = { ...patient, ...editData } as Patient;
+    setPatient(updated);
+    setIsEditOpen(false);
+  };
 
   useEffect(() => {
     const fetchPatient = async () => {
@@ -77,17 +108,12 @@ const PatientDetails = () => {
           firstName,
           lastName,
           recordNumber: '', // Add logic if your backend supports it
-          age: data.patient.age,
+          birthDate: data.patient.birthDate,
           height: `${data.patient.height}`,
           weight: `${data.patient.weight}`,
           labResults: data.patient.lab_results?.notes || '',
           doctorNotes: data.patient.doctors_notes || '',
-          severity:
-            data.patient.severity === 'low'
-              ? 'Mild'
-              : data.patient.severity === 'medium'
-              ? 'Moderate'
-              : 'Severe',
+          severity: mapSeverity(data.patient.severity),
           createdAt: new Date(), // Optional: replace with actual timestamps
           updatedAt: new Date(),
         });
@@ -100,19 +126,6 @@ const PatientDetails = () => {
 
     fetchPatient();
   }, [id]);
-
-  const getSeverityColor = (severity: Patient['severity']) => {
-    switch (severity) {
-      case 'Mild':
-        return 'bg-success text-success-foreground';
-      case 'Moderate':
-        return 'bg-warning text-warning-foreground';
-      case 'Severe':
-        return 'bg-destructive text-destructive-foreground';
-      default:
-        return 'bg-muted text-muted-foreground';
-    }
-  };
 
   const getStatusColor = (status: Test['status']) => {
     switch (status) {
@@ -170,14 +183,18 @@ const PatientDetails = () => {
               </div>
             </div>
             <div className="flex items-center space-x-3">
-              <Link to={`/patient/${id}/edit`}>
+              {/* <Link to={`/patient/${id}/edit`}>
                 <Button variant="outline">
                   <Edit className="mr-2 h-4 w-4" />
                   Edit Patient
                 </Button>
-              </Link>
+              </Link> */}
+              <Button variant="outline" onClick={openForEdit}>
+                <Edit className="mr-2 h-4 w-4" />
+                Edit Patient  
+              </Button>
               <Link to={`/patient/${id}/test-selection`}>
-                <Button className="bg-gradient-primary hover:bg-primary-hover">
+                <Button className="bg-primary hover:bg-primary-hover">
                   <Plus className="mr-2 h-4 w-4" />
                   New Test
                 </Button>
@@ -204,7 +221,7 @@ const PatientDetails = () => {
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                   <div>
                     <p className="text-sm font-medium text-muted-foreground">Age</p>
-                    <p className="text-lg font-semibold">{patient.age} years</p>
+                    <p className="text-lg font-semibold">  {patient.birthDate ? `${calculateAge(patient.birthDate)} years` : 'N/A'} </p> {/*Create a function to calculate age*/}
                   </div>
                   <div>
                     <p className="text-sm font-medium text-muted-foreground">Height</p>
@@ -291,7 +308,110 @@ const PatientDetails = () => {
           </div>
         </div>
       </div>
+
+      {/* Edit Patient pop up*/}
+      <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="mb-4 text-lg font-semibold">Edit Patient Details</DialogTitle>
+          </DialogHeader>
+          <form onSubmit={handleEditSubmit} className="space-y-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="firstName">First Name</Label>
+                <Input
+                  id="firstName"
+                  value={editData.firstName ?? ""}
+                  onChange={(e) => setEditData(d => ({ ...d, firstName: e.target.value }))}
+                />
+              </div>
+              <div>
+                <Label htmlFor="lastName">Last Name</Label>
+                <Input
+                  id="lastName"
+                  value={editData.lastName ?? ""}
+                  onChange={(e) => setEditData(d => ({ ...d, lastName: e.target.value }))}
+                />
+              </div>
+              <div>
+                <Label htmlFor="birthDate">Birthdate</Label>
+                <Input
+                  id="birthDate"
+                  type="date"
+                  value={editData.birthDate ?? ""}
+                  onChange={(e) => setEditData(d => ({ ...d, birthDate: e.target.value }))}
+                />
+              </div>
+              <div>
+                <Label htmlFor="severity">Severity</Label>
+                <Select
+                  value={editData.severity ?? "Stage 1"}
+                  onValueChange={(v) => setEditData(d => ({ ...d, severity: v as Patient["severity"] }))}
+                >
+                  <SelectTrigger id="severity">
+                    <SelectValue placeholder="Select severity" />
+                  </SelectTrigger>
+                  <SelectContent position='popper' className="z-[60]">
+                    <SelectItem value="Stage 1">Stage 1</SelectItem>
+                    <SelectItem value="Stage 2">Stage 2</SelectItem>
+                    <SelectItem value="Stage 3">Stage 3</SelectItem>
+                    <SelectItem value="Stage 4">Stage 4</SelectItem>
+                    <SelectItem value="Stage 5">Stage 5</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label htmlFor="height">Height</Label>
+                <Input
+                  id="height"
+                  placeholder="e.g., 170 cm"
+                  value={editData.height ?? ""}
+                  onChange={(e) => setEditData(d => ({ ...d, height: e.target.value }))}
+                />
+              </div>
+              <div>
+                <Label htmlFor="weight">Weight</Label>
+                <Input
+                  id="weight"
+                  placeholder="e.g., 70 kg"
+                  value={editData.weight ?? ""}
+                  onChange={(e) => setEditData(d => ({ ...d, weight: e.target.value }))}
+                />
+              </div>
+            </div>
+
+            <div>
+              <Label htmlFor="labResults">Lab Results</Label>
+              <Textarea
+                id="labResults"
+                rows={3}
+                value={editData.labResults ?? ""}
+                onChange={(e) => setEditData(d => ({ ...d, labResults: e.target.value }))}
+              />
+            </div>
+
+            <div>
+              <Label htmlFor="doctorNotes">Doctor Notes</Label>
+              <Textarea
+                id="doctorNotes"
+                rows={4}
+                value={editData.doctorNotes ?? ""}
+                onChange={(e) => setEditData(d => ({ ...d, doctorNotes: e.target.value }))}
+              />
+            </div>
+
+            <div className="flex justify-end gap-2 pt-2">
+              <Button type="button" variant="outline" onClick={() => setIsEditOpen(false)}>
+                Cancel
+              </Button>
+              <Button type="submit">Save</Button>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
+
+
   );
 };
 

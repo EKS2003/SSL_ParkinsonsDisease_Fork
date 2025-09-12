@@ -21,7 +21,7 @@ const PatientForm = () => {
     firstName: '',
     lastName: '',
     recordNumber: '',
-    age: '',
+    birthDate: '',
     height: '',
     weight: '',
     labResults: '',
@@ -50,7 +50,7 @@ const PatientForm = () => {
           firstName: patient.firstName,
           lastName: patient.lastName,
           recordNumber: patient.recordNumber,
-          age: patient.age.toString(),
+          birthDate: patient.age.toString(),
           height: patient.height,
           weight: patient.weight,
           labResults: patient.labResults,
@@ -71,7 +71,7 @@ const PatientForm = () => {
     e.preventDefault();
     setLoading(true);
 
-    if (!formData.firstName || !formData.lastName || !formData.recordNumber || !formData.age || !formData.severity) {
+    if (!formData.firstName || !formData.lastName || !formData.recordNumber || !formData.birthDate || !formData.severity) {
       toast({
         title: "Validation Error",
         description: "Please fill in all required fields.",
@@ -86,7 +86,7 @@ const PatientForm = () => {
         firstName: formData.firstName,
         lastName: formData.lastName,
         recordNumber: formData.recordNumber,
-        age: parseInt(formData.age),
+        birthDate: (formData.birthDate),
         height: formData.height || '170 cm',
         weight: formData.weight || '70 kg',
         labResults: formData.labResults || '{}',
@@ -214,7 +214,7 @@ const PatientForm = () => {
                       id="age"
                       type="number"
                       placeholder="Enter age"
-                      value={formData.age}
+                      value={formData.birthDate}
                       onChange={(e) => handleInputChange('age', e.target.value)}
                       required
                     />
@@ -249,9 +249,11 @@ const PatientForm = () => {
                       <SelectValue placeholder="Select severity level" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="Mild">Mild</SelectItem>
-                      <SelectItem value="Moderate">Moderate</SelectItem>
-                      <SelectItem value="Severe">Severe</SelectItem>
+                      <SelectItem value="Stage 1">Stage 1</SelectItem>
+                      <SelectItem value="Stage 2">Stage 2</SelectItem>
+                      <SelectItem value="Stage 3">Stage 3</SelectItem>
+                      <SelectItem value="Stage 4">Stage 4</SelectItem>
+                      <SelectItem value="Stage 5">Stage 5</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
