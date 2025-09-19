@@ -1,6 +1,6 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { ArrowLeft, Play, FileText, Activity, Video, Upload } from 'lucide-react';
+import { ArrowLeft, Play, FileText, Activity, Video, Upload, ReceiptRussianRuble } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -9,6 +9,7 @@ import { useToast } from '@/hooks/use-toast';
 import { Patient, Test, AVAILABLE_TESTS } from '@/types/patient';
 import apiService from '@/services/api';
 import { getSeverityColor, calculateAge } from '@/lib/utils';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter} from '@/components/ui/dialog';
 
 const TestSelection = () => {
   const { id } = useParams<{ id: string }>();
@@ -20,6 +21,9 @@ const TestSelection = () => {
   const [loading, setLoading] = useState(false);
   const [loadingPatient, setLoadingPatient] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -46,6 +50,32 @@ const TestSelection = () => {
     };
     fetchData();
   }, [id]);
+
+  const handleUploadClick = () => {
+    if (fileInputRef.current){
+      fileInputRef.current.value = "";
+      fileInputRef.current.click();
+    }
+  }
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const allowedTypes = ['video/mp4', 'video/quicktime'];
+    if (!allowedTypes.includes(file.type)){
+      toast({
+        title: "Invalid File Type",
+        description: "please select a .mp4 or .mov video file",
+      });
+      return;
+    }
+    setSelectedFile(file); //this stores the selected file in a state
+    navigate(`/patient/${id}/video-summary`, {
+      state: { file, selectedTests },
+    });
+  }
+
+
 
   const handleTestSelection = (testId: string) => {
     setSelectedTests(prev => 
@@ -242,11 +272,19 @@ const TestSelection = () => {
                     variant="outline"
                     disabled={selectedTests.length === 0}
                     className="h-24 flex-col"
+                    onClick={() => setIsUploadModalOpen(true)}
                   >
                     <Upload className="h-8 w-8 mb-2" />
                     <span className="font-semibold">Upload Video</span>
                     <span className="text-xs text-muted-foreground">Upload existing video file</span>
                   </Button>
+                  {/* <input
+                    ref={fileInputRef}
+                    type='file'
+                    accept='.mp4, .mov'
+                    style={{display: 'none'}}
+                    onChange={handleFileChange}
+                  /> */}
                 </div>
                 {selectedTests.length > 0 && (
                   <div className="mt-4 p-4 bg-medical-light rounded-lg">
@@ -270,8 +308,36 @@ const TestSelection = () => {
           </div>
         </div>
       </div>
+
+      {/*Upload menu */}
+  <Dialog open={isUploadModalOpen} onOpenChange={setIsUploadModalOpen}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Upload Video for Selected Tests</DialogTitle>
+        </DialogHeader>
+        <div className="grid gap-4 py-4">
+          {/* Need to work on the dialog box formating for selecting tests */}
+          <Button variant='outline' onClick={handleUploadClick}>
+            <Upload className = "mr-2 h-4 w-4">Select Video File</Upload>
+          </Button>
+          <input
+            ref={fileInputRef}
+            type='file'
+            accept='.mp4, .mov'
+            style={{display: 'none'}}
+            onChange={handleFileChange}
+          />
+        </div>
+        <DialogFooter>
+          <Button variant="secondary" onClick={() => setIsUploadModalOpen(false)}>Cancel</Button>
+
+        </DialogFooter>
+      </DialogContent>
+    </Dialog> 
+
     </div>
   );
+
 };
 
 export default TestSelection;
