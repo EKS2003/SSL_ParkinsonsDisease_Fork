@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 from repo.sql_models import Visit
 
 
-class VisistRepository:
+class VisitRepository:
     def __init__(self, session: Session) -> None:
         self.session = session
 

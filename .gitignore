@@ -1,4 +1,6 @@
+# =========================================================
 # Logs
+# =========================================================
 logs
 *.log
 npm-debug.log*
@@ -7,21 +9,52 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
-node_modules
-dist
-dist-ssr
-*.local
+# =========================================================
+# Dependencies / Build Artifacts
+# =========================================================
+node_modules/
+dist/
+dist-ssr/
+*.tgz
+*.tar.gz
 
-# Editor directories and files
+# Next.js / React / Vue
+.next/
+out/
+coverage/
+
+# Python
+__pycache__/
+*.pyc
+venv/
+.venv/
+*.egg-info/
+
+# Databases
+*.db
+
+# =========================================================
+# Environment / Local Config
+# =========================================================
+*.local
+.env
+.env.*
+
+# =========================================================
+# Editor / IDE
+# =========================================================
 .vscode/*
 !.vscode/extensions.json
-.idea
-.DS_Store
+.idea/
 *.suo
 *.ntvs*
 *.njsproj
 *.sln
 *.sw?
 
-#DB Files
-*.db
+# =========================================================
+# OS-specific
+# =========================================================
+.DS_Store
+Thumbs.db
+ehthumbs.db

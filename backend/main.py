@@ -11,8 +11,26 @@ from subprocess import run, PIPE
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, Session
 
+
+from repo.sql_models import Base, Patient, Visit
 from repo.patient_repository import PatientRepository
-from repo.sql_models import Base, Patient
+from repo.visit_repository import VisitRepository
+from repo.excel_to_repository import ExcelToRepository
+
+
+from schema.patient_schema import (
+    PatientCreate,
+    PatientUpdate,
+    PatientResponse,
+    PatientsListResponse,
+)
+
+from schema.visit_schema import (
+    VisitCreate,
+    VisitUpdate,
+    VisitResponse,
+    VisitsListResponse,
+)
 
 from test_history_manager import TestHistoryManager
 
@@ -24,6 +42,7 @@ os.makedirs(RECORDINGS_DIR, exist_ok=True)
 
 engine = create_engine("sqlite:///./test.db", echo=True, future=True)
 SessionLocal = sessionmaker(bind=engine)
+Base.metadata.create_all(engine)
 
 def get_db():
     db = SessionLocal()
@@ -57,40 +76,8 @@ app.add_middleware(
 
 # Pydantic models for request/response validation
 #Metric units: height in cm, weight in kg
-class PatientBase(BaseModel):
-    name: Optional[str] = None
-    dob: Optional[date] = None
-    height: Optional[int] = None
-    weight: Optional[int] = None
 
 
-class PatientCreate(PatientBase):
-    patient_id: str
-
-class PatientUpdate(PatientBase):
-    pass
-
-class PatientResponse(PatientBase):
-    patient_id: str
-    class Config:
-        orm_mode = True
-
-class PatientsListResponse(BaseModel):
-    success: bool
-    patients: List[PatientResponse]
-    total: int
-    skip: int
-    limit: int
-
-class PatientSearchResponse(BaseModel):
-    success: bool
-    patients: List[PatientResponse]
-    count: int
-
-class FilterCriteria(BaseModel):
-    min_age: Optional[int] = None
-    max_age: Optional[int] = None
-    severity: Optional[str] = None
 
 # API Routes
 @app.get("/")
@@ -275,22 +262,56 @@ async def add_patient_test(patient_id: str, test_data: dict = Body(...)):
     thm.add_patient_test(patient_id, test_data)
     return {"success": True}
 
-'''
+
 @app.post("/visit/", response_model=Dict)
-async def create_visit(patient_id: str, visit_data: dict = Body(...), db: Session = Depends(get_db)):
-    repo = PatientRepository(db)
-    patient = repo.get(patient_id)
+async def create_visit(payload: VisitCreate, db: Session = Depends(get_db)):
+    visit_repo = VisitRepository(db)
+    patient_repo = PatientRepository(db)
+    patient = patient_repo.get(payload.patient_id)
     if not patient:
         raise HTTPException(status_code=404, detail="Patient not found")
     
-    if 'visits' not in patient.__dict__ or patient.visits is None:
-        patient.visits = []
-    
-    patient.visits.append(visit_data)
+   
     try:
-        repo.update(patient_id, {"visits": patient.visits})
+        visit = Visit(
+            patient_id=payload.patient_id,
+            visit_date=payload.visit_date,
+            progression_note=payload.progression_note,
+            doctor_notes=payload.doctor_notes,
+            vitals_json=payload.vitals_json,
+            status=payload.status
+        )
+        visit_repo.add(visit)
         return {"success": True, "visits": patient.visits}
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=400, detail=str(e))
-'''
+    
+@app.get("/visit/", response_model=VisitsListResponse)
+async def get_visits(
+        skip: int = Query(0, ge=0),
+        limit: int = Query(100, ge=1, le=1000),
+        db: Session = Depends(get_db)
+):
+    visit_repo = VisitRepository(db)
+    visits = visit_repo.list(skip=skip, limit=limit)
+    return VisitsListResponse(
+        success=True,
+        visits=visits,
+        total=len(visits),
+        skip=skip,
+        limit=limit
+    )
+
+
+@app.post("/import-excel/")
+async def import_excel(file: UploadFile = File(...), db: Session = Depends(get_db)):
+    data = await file.read()
+    importer = ExcelToRepository(db)
+    workbook = importer.load_workbook_from_bytes(data)
+    try:
+        importer.import_workbook(workbook)
+        return {"success": True, "message": f"{file.filename} imported successfully"}
+    except Exception as exc:
+        db.rollback()
+        raise HTTPException(status_code=400, detail=str(exc))

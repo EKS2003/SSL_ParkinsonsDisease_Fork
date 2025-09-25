@@ -1,7 +1,10 @@
 from typing import Optional, List, Dict, Any
 from sqlalchemy.orm import Session
 from repo.sql_models import Patient
-from ..main import FilterCriteria, PatientSearchResponse
+from schema.patient_schema import (
+    PatientSearchResponse,
+    FilterCriteria)
+
 
 class PatientRepository:
     def __init__(self, session: Session) -> None:
@@ -44,7 +47,7 @@ class PatientRepository:
             .all()
         )
     
-    def filter(criteria: FilterCriteria) -> PatientSearchResponse:
+    def filter(self, criteria: FilterCriteria) -> PatientSearchResponse:
         query = self.session.query(Patient)
         if criteria.name:
             query = query.filter(Patient.name.ilike(f"%{criteria.name}%"))
