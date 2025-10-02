@@ -16,7 +16,9 @@ class Patient:
                  lab_results: Dict = None,
                  doctors_notes: str = "",
                  severity: str = "low",
-                 patient_id: str = None):
+                 patient_id: str = None,
+                 lab_results_history: List = None,
+                 doctors_notes_history: List = None):
         self.name = name
         self.birthDate = birthDate
         self.height = height  # in cm
@@ -25,6 +27,8 @@ class Patient:
         self.doctors_notes = doctors_notes
         self.severity = severity  # low, medium, high
         self.patient_id = patient_id or self._generate_id()
+        self.lab_results_history = lab_results_history or []
+        self.doctors_notes_history = doctors_notes_history or []
 
     def _generate_id(self) -> str:
         """Generate a unique ID for the patient based on name and current timestamp"""
@@ -42,7 +46,9 @@ class Patient:
             "weight": str(self.weight),  # Convert to string for API response
             "lab_results": self.lab_results,
             "doctors_notes": self.doctors_notes,
-            "severity": self.severity
+            "severity": self.severity,
+            "lab_results_history": self.lab_results_history,
+            "doctors_notes_history": self.doctors_notes_history
         }
 
     @classmethod
@@ -75,14 +81,16 @@ class Patient:
             weight = float(weight_raw) if weight_raw is not None else 0.0
         
         return cls(
+            patient_id=data.get("patient_id"),
             name=data.get("name", ""),
-            birthDate=data.get("birthDate", 0),
+            birthDate=data.get("birthDate", ""),
             height=height,
             weight=weight,
             lab_results=data.get("lab_results", {}),
             doctors_notes=data.get("doctors_notes", ""),
             severity=data.get("severity", "low"),
-            patient_id=data.get("patient_id")
+            lab_results_history=data.get("lab_results_history", []),
+            doctors_notes_history=data.get("doctors_notes_history", [])
         )
 
 
@@ -486,7 +494,7 @@ def create_patient(name: str, birthDate: str, height: float, weight: float,
 
     patient = Patient(
         name=name,
-        age=age,
+        birthDate=birthDate,
         height=height,
         weight=weight,
         lab_results=lab_results or {},
@@ -566,7 +574,7 @@ async def async_create_patient(name: str, birthDate: str, height: float, weight:
 
     patient = Patient(
         name=name,
-        age=age,
+        birthDate=birthDate,
         height=height,
         weight=weight,
         lab_results=lab_results or {},

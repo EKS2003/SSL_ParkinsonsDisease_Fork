@@ -10,7 +10,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
-import { Patient } from '@/types/patient';
+import { Patient, DoctorNoteEntry } from '@/types/patient';
 import apiService from '@/services/api';
 import { useApiStatus } from '@/hooks/use-api-status';
 import { getSeverityColor, calculateAge } from '@/lib/utils';
@@ -43,7 +43,10 @@ const PatientList = () => {
     setLoading(true);
     try {
       const response = await apiService.getPatients();
+      console.log('PatientList API Response:', response);
       if (response.success && response.data) {
+        console.log('Patient data received:', response.data);
+        console.log('First patient historical data:', response.data[0]?.doctorNotesHistory, response.data[0]?.labResultsHistory);
         setPatients(response.data);
       } else {
         toast({
@@ -312,15 +315,57 @@ const PatientList = () => {
                         <AlertCircle className="mr-2 h-4 w-4" />
                         Last updated: {patient.updatedAt.toLocaleDateString()}
                       </div>
-                      {patient.doctorNotes && (
-                        <div className="bg-muted p-3 rounded-md">
-                          <p className="text-sm text-muted-foreground">
-                            "{patient.doctorNotes.length > 60 
-                              ? patient.doctorNotes.substring(0, 60) + '...' 
-                              : patient.doctorNotes}"
-                          </p>
-                        </div>
-                      )}
+                      {(() => {
+                        // Get the most recent doctor's note from history
+                        let mostRecentNote = null;
+                        if (patient.doctorNotesHistory && patient.doctorNotesHistory.length > 0) {
+                          // Sort by date (most recent first) and get the first one
+                          const sortedNotes = [...patient.doctorNotesHistory].sort((a, b) => {
+                            const dateA = new Date(a.date).getTime();
+                            const dateB = new Date(b.date).getTime();
+                            return dateB - dateA;
+                          });
+                          mostRecentNote = sortedNotes[0];
+                        }
+                        
+                        // Fallback to legacy doctorNotes if no history exists
+                        const noteToDisplay = mostRecentNote?.note || patient.doctorNotes;
+                        
+                        if (noteToDisplay) {
+                          return (
+                            <div className="bg-muted/50 border-l-4 border-medical-blue p-3 rounded-md">
+                              <div className="flex items-start gap-2">
+                                <FileText className="h-4 w-4 text-medical-blue mt-0.5 flex-shrink-0" />
+                                <div className="flex-1">
+                                  <p className="text-sm font-medium text-foreground">Latest Note:</p>
+                                  <p className="text-sm text-muted-foreground mt-1">
+                                    "{noteToDisplay.length > 80 
+                                      ? noteToDisplay.substring(0, 80) + '...' 
+                                      : noteToDisplay}"
+                                  </p>
+                                  {mostRecentNote && (
+                                    <p className="text-xs text-muted-foreground/70 mt-2">
+                                      {new Date(mostRecentNote.date).toLocaleDateString()} by {mostRecentNote.addedBy}
+                                    </p>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        }
+                        
+                        // Show placeholder if no notes exist
+                        return (
+                          <div className="bg-muted/30 p-3 rounded-md border border-dashed">
+                            <div className="flex items-center gap-2">
+                              <FileText className="h-4 w-4 text-muted-foreground/50" />
+                              <p className="text-sm text-muted-foreground/70 italic">
+                                No doctor's notes available
+                              </p>
+                            </div>
+                          </div>
+                        );
+                      })()}
                     </div>
                   </CardContent>
                 </Card>

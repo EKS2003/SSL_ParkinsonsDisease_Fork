@@ -11,6 +11,18 @@ interface BackendPatient {
   lab_results: Record<string, any>;
   doctors_notes: string;
   severity: string;
+  lab_results_history?: Array<{
+    id: string;
+    date: string;
+    results: string;
+    added_by: string;
+  }>;
+  doctors_notes_history?: Array<{
+    id: string;
+    date: string;
+    note: string;
+    added_by: string;
+  }>;
 }
 
 interface BackendPatientCreate {
@@ -47,16 +59,33 @@ const convertBackendToFrontend = (backendPatient: BackendPatient) => {
   const firstName = nameParts[0] || '';
   const lastName = nameParts.slice(1).join(' ') || '';
   
+  // Debug logging (commented out)
+  // console.log('Converting backend patient:', backendPatient.patient_id);
+  // console.log('Doctor notes history:', backendPatient.doctors_notes_history);
+  // console.log('Legacy doctor notes:', backendPatient.doctors_notes);
+  
   return {
     id: backendPatient.patient_id || '',
     firstName,
     lastName,
     recordNumber: backendPatient.patient_id || '', // Using patient_id as record number
-    birthDate: backendPatient.birthDate || 0,
+    birthDate: backendPatient.birthDate || '',
     height: `${backendPatient.height || 0} cm`,
     weight: `${backendPatient.weight || 0} kg`,
     labResults: JSON.stringify(backendPatient.lab_results || {}),
     doctorNotes: backendPatient.doctors_notes || '',
+    labResultsHistory: (backendPatient.lab_results_history || []).map(entry => ({
+      id: entry.id,
+      date: new Date(entry.date),
+      results: entry.results,
+      addedBy: entry.added_by
+    })),
+    doctorNotesHistory: (backendPatient.doctors_notes_history || []).map(entry => ({
+      id: entry.id,
+      date: new Date(entry.date),
+      note: entry.note,
+      addedBy: entry.added_by
+    })),
     severity: mapSeverity(backendPatient.severity || 'low'),
     createdAt: new Date(), // Backend doesn't provide this, using current date
     updatedAt: new Date(), // Backend doesn't provide this, using current date
@@ -84,15 +113,25 @@ const convertFrontendToBackend = (frontendPatient: any): BackendPatientCreate =>
 // Map severity from backend to frontend
 export const mapSeverity = (backendSeverity: string): 'Stage 1' | 'Stage 2' | 'Stage 3' | 'Stage 4' | 'Stage 5' => {
   switch (backendSeverity.toLowerCase()) {
-    case 'Stage 1':
+    case 'mild':
       return 'Stage 1';
-    case 'Stage 2':
+    case 'medium':
       return 'Stage 2';
-    case 'Stage 3':
-      return 'Stage 3';
-    case 'Stage 4':
+    case 'severe':
       return 'Stage 4';
-    case 'Stage 5':
+    case 'low':
+      return 'Stage 1';
+    case 'high':
+      return 'Stage 5';
+    case 'stage 1':
+      return 'Stage 1';
+    case 'stage 2':
+      return 'Stage 2';
+    case 'stage 3':
+      return 'Stage 3';
+    case 'stage 4':
+      return 'Stage 4';
+    case 'stage 5':
       return 'Stage 5';
     default:
       return 'Stage 1';
@@ -103,17 +142,17 @@ export const mapSeverity = (backendSeverity: string): 'Stage 1' | 'Stage 2' | 'S
 const mapSeverityToBackend = (frontendSeverity: string): string => {
   switch (frontendSeverity) {
     case 'Stage 1':
-      return 'Stage 1';
+      return 'mild';
     case 'Stage 2':
-      return 'Stage 2';
+      return 'medium';
     case 'Stage 3':
-      return 'Stage 3';
+      return 'medium';
     case 'Stage 4':
-      return 'Stage 4';
+      return 'severe';
     case 'Stage 5':
-      return 'Stage 5';
+      return 'severe';
     default:
-      return 'Stage 1';
+      return 'mild';
   }
 };
 
