@@ -4,6 +4,8 @@ WORKDIR /app
 
 RUN mkdir -p /app/data
 
+RUN pip install mediapipe
+
 RUN pip install opencv-python-headless
 
 RUN pip install mediapipe
@@ -13,6 +15,11 @@ RUN pip install fastAPI
 RUN pip install uvicorn
 
 RUN pip install python-multipart
+
+RUN pip install "uvicorn[standard]"
+
+RUN pip install websockets
+
 
 COPY . .
 

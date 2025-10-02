@@ -25,3 +25,6 @@ dist-ssr
 
 #DB Files
 *.db
+*.mp4
+*.mov
+*.avi
