@@ -11,14 +11,14 @@ export const getSeverityColor = (severity: Patient['severity']) => {
     switch (severity) {
       case 'Stage 1':
         return 'bg-success text-success-foreground';
-      case 'Stage 1':
-        return 'bg-success text-success-foreground';
-      case 'Stage 1':
-        return 'bg-success text-success-foreground';
-      case 'Stage 1':
-        return 'bg-success text-success-foreground';
-      case 'Stage 1':
-        return 'bg-success text-success-foreground';
+      case 'Stage 2':
+        return 'bg-warning text-warning-foreground';
+      case 'Stage 3':
+        return 'bg-orange-500 text-white';
+      case 'Stage 4':
+        return 'bg-destructive text-destructive-foreground';
+      case 'Stage 5':
+        return 'bg-red-900 text-white';
       default:
         return 'bg-muted text-muted-foreground';
     }

@@ -2,11 +2,211 @@
   "johnd1755555241": {
     "patient_id": "johnd1755555241",
     "name": "John Doe",
-    "age": 65,
+    "birthDate": "1965-05-19",
     "height": "170.0",
     "weight": "70.0",
     "lab_results": {},
     "doctors_notes": "",
     "severity": "medium"
+  },
+  "marys2844332156": {
+    "patient_id": "marys2844332156",
+    "name": "Mary Smith",
+    "birthDate": "1953-03-15",
+    "height": "165.0",
+    "weight": "68.5",
+    "lab_results": {},
+    "doctors_notes": "Early stage tremor, responds well to medication",
+    "severity": "mild"
+  },
+  "robertj3912847365": {
+    "patient_id": "robertj3912847365",
+    "name": "Robert Johnson",
+    "birthDate": "1957-07-22",
+    "height": "178.0",
+    "weight": "82.0",
+    "lab_results": {},
+    "doctors_notes": "Moderate bradykinesia, some rigidity",
+    "severity": "medium"
+  },
+  "lindaw4578293617": {
+    "patient_id": "lindaw4578293617",
+    "name": "Linda Williams",
+    "birthDate": "1964-11-08",
+    "height": "162.0",
+    "weight": "59.0",
+    "lab_results": {},
+    "doctors_notes": "Postural instability, falls risk assessment needed",
+    "severity": "severe"
+  },
+  "davidb5234876921": {
+    "patient_id": "davidb5234876921",
+    "name": "David Brown",
+    "birthDate": "1951-02-14",
+    "height": "175.0",
+    "weight": "77.0",
+    "lab_results": {},
+    "doctors_notes": "Progressive symptoms over 8 years",
+    "severity": "severe"
+  },
+  "susand6789123457": {
+    "patient_id": "susand6789123457",
+    "name": "Susan Davis",
+    "birthDate": "1967-09-12",
+    "height": "168.0",
+    "weight": "65.0",
+    "lab_results": {},
+    "doctors_notes": "Recently diagnosed, minimal symptoms",
+    "severity": "mild"
+  },
+  "michaelm7456821093": {
+    "patient_id": "michaelm7456821093",
+    "name": "Michael Miller",
+    "birthDate": "1956-04-03",
+    "height": "183.0",
+    "weight": "85.0",
+    "lab_results": {},
+    "doctors_notes": "Freezing episodes during gait",
+    "severity": "medium"
+  },
+  "nancyw8321654987": {
+    "patient_id": "nancyw8321654987",
+    "name": "Nancy Wilson",
+    "birthDate": "1959-08-27",
+    "height": "160.0",
+    "weight": "72.0",
+    "lab_results": {},
+    "doctors_notes": "Cognitive changes noted",
+    "severity": "medium"
+  },
+  "jamesm9876543210": {
+    "patient_id": "jamesm9876543210",
+    "name": "James Moore",
+    "birthDate": "1954-01-16",
+    "height": "172.0",
+    "weight": "74.0",
+    "lab_results": {},
+    "doctors_notes": "Sleep disturbances affecting quality of life",
+    "severity": "medium"
+  },
+  "patriciaa1234567890": {
+    "patient_id": "patriciaa1234567890",
+    "name": "Patricia Anderson",
+    "birthDate": "1962-06-30",
+    "height": "157.0",
+    "weight": "61.0",
+    "lab_results": {},
+    "doctors_notes": "Excellent response to DBS therapy",
+    "severity": "mild"
+  },
+  "charlesg2345678901": {
+    "patient_id": "charlesg2345678901",
+    "name": "Charles Garcia",
+    "birthDate": "1958-12-05",
+    "height": "180.0",
+    "weight": "80.0",
+    "lab_results": {},
+    "doctors_notes": "Bilateral symptoms, medication adjustment needed",
+    "severity": "severe"
+  },
+  "barbarah3456789012": {
+    "patient_id": "barbarah3456789012",
+    "name": "Barbara Harris",
+    "birthDate": "1955-10-18",
+    "height": "163.0",
+    "weight": "58.0",
+    "lab_results": {},
+    "doctors_notes": "Speech difficulties developing",
+    "severity": "medium"
+  },
+  "thomast4567890123": {
+    "patient_id": "thomast4567890123",
+    "name": "Thomas Taylor",
+    "birthDate": "1961-03-24",
+    "height": "176.0",
+    "weight": "78.0",
+    "lab_results": {},
+    "doctors_notes": "Active lifestyle maintained despite diagnosis",
+    "severity": "mild"
+  },
+  "elizabethc5678901234": {
+    "patient_id": "elizabethc5678901234",
+    "name": "Elizabeth Clark",
+    "birthDate": "1950-05-07",
+    "height": "159.0",
+    "weight": "64.0",
+    "lab_results": {},
+    "doctors_notes": "Advanced stage, caregiver support in place",
+    "severity": "severe"
+  },
+  "kennethl6789012345": {
+    "patient_id": "kennethl6789012345",
+    "name": "Kenneth Lewis",
+    "birthDate": "1963-11-13",
+    "height": "174.0",
+    "weight": "73.0",
+    "lab_results": {},
+    "doctors_notes": "Young onset, genetic testing recommended",
+    "severity": "mild"
+  },
+  "deborahw7890123456": {
+    "patient_id": "deborahw7890123456",
+    "name": "Deborah White",
+    "birthDate": "1956-07-09",
+    "height": "166.0",
+    "weight": "67.0",
+    "lab_results": {},
+    "doctors_notes": "Tremor-dominant phenotype",
+    "severity": "medium"
+  },
+  "paulh8901234567": {
+    "patient_id": "paulh8901234567",
+    "name": "Paul Hall",
+    "birthDate": "1952-04-21",
+    "height": "169.0",
+    "weight": "71.0",
+    "lab_results": {},
+    "doctors_notes": "Non-motor symptoms predominant",
+    "severity": "medium"
+  },
+  "heleny9012345678": {
+    "patient_id": "heleny9012345678",
+    "name": "Helen Young",
+    "birthDate": "1960-02-28",
+    "height": "161.0",
+    "weight": "60.0",
+    "lab_results": {},
+    "doctors_notes": "Depression comorbidity being treated",
+    "severity": "medium"
+  },
+  "markk0123456789": {
+    "patient_id": "markk0123456789",
+    "name": "Mark King",
+    "birthDate": "1965-09-11",
+    "height": "181.0",
+    "weight": "84.0",
+    "lab_results": {},
+    "doctors_notes": "Participating in clinical trial",
+    "severity": "mild"
+  },
+  "dorisg1234567890": {
+    "patient_id": "dorisg1234567890",
+    "name": "Doris Green",
+    "birthDate": "1948-12-03",
+    "height": "158.0",
+    "weight": "55.0",
+    "lab_results": {},
+    "doctors_notes": "Significant motor fluctuations",
+    "severity": "severe"
+  },
+  "stevens2345678901": {
+    "patient_id": "stevens2345678901",
+    "name": "Steven Scott",
+    "birthDate": "1959-01-25",
+    "height": "177.0",
+    "weight": "79.0",
+    "lab_results": {},
+    "doctors_notes": "Stable on current medication regimen",
+    "severity": "mild"
   }
 }

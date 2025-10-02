@@ -220,8 +220,8 @@ const PatientDetails = () => {
               <CardContent className="space-y-4">
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                   <div>
-                    <p className="text-sm font-medium text-muted-foreground">Age</p>
-                    <p className="text-lg font-semibold">  {patient.birthDate ? `${calculateAge(patient.birthDate)} years` : 'N/A'} </p> {/*Create a function to calculate age*/}
+                    <p className="text-sm font-medium text-muted-foreground">Date of Birth</p>
+                    <p className="text-lg font-semibold">{patient.birthDate || 'N/A'}</p>
                   </div>
                   <div>
                     <p className="text-sm font-medium text-muted-foreground">Height</p>

@@ -60,7 +60,8 @@ app.add_middleware(
         "http://127.0.0.1:8080",
         "http://127.0.0.1:5173",
         "http://127.0.0.1:3000",
-    ],
+        "http://localhost:5174"
+    ],  # Adjust this in production to your frontend's URL
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -79,6 +80,7 @@ class PatientCreate(BaseModel):
 class PatientUpdate(BaseModel):
     name: Optional[str] = None
     age: Optional[int] = Field(None, ge=0, le=120)
+    birthDate: Optional[str] = None
     height: Optional[str] = None
     weight: Optional[str] = None
     lab_results: Optional[Dict] = None
@@ -88,9 +90,9 @@ class PatientUpdate(BaseModel):
 class PatientResponse(BaseModel):
     patient_id: str
     name: str
-    age: int
-    height: str
-    weight: str
+    birthDate: str
+    height: str  # Changed to str to handle existing data
+    weight: str  # Changed to str to handle existing data
     lab_results: Dict
     doctors_notes: str
     severity: str
@@ -342,7 +344,7 @@ async def create_patient(patient: PatientCreate):
     doctors_notes = patient.doctors_notes if patient.doctors_notes is not None else ""
     result = await async_create_patient(
         name=patient.name,
-        age=patient.age,
+        birthDate=patient.birthDate,
         height=height,
         weight=weight,
         lab_results=lab_results,

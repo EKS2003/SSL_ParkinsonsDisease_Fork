@@ -10,7 +10,7 @@ TEST_HISTORY_FILE = os.path.join(os.path.dirname(__file__), 'test_history.json')
 class Patient:
     def __init__(self,
                  name: str,
-                 age: int,
+                 birthDate: str,
                  height: float,
                  weight: float,
                  lab_results: Dict = None,
@@ -18,7 +18,7 @@ class Patient:
                  severity: str = "low",
                  patient_id: str = None):
         self.name = name
-        self.age = age
+        self.birthDate = birthDate
         self.height = height  # in cm
         self.weight = weight  # in kg
         self.lab_results = lab_results or {}
@@ -37,7 +37,7 @@ class Patient:
         return {
             "patient_id": self.patient_id,
             "name": self.name,
-            "age": self.age,
+            "birthDate": self.birthDate,
             "height": str(self.height),  # Convert to string for API response
             "weight": str(self.weight),  # Convert to string for API response
             "lab_results": self.lab_results,
@@ -76,7 +76,7 @@ class Patient:
         
         return cls(
             name=data.get("name", ""),
-            age=data.get("age", 0),
+            birthDate=data.get("birthDate", 0),
             height=height,
             weight=weight,
             lab_results=data.get("lab_results", {}),
@@ -479,7 +479,7 @@ class PatientManager:
 
 
 # Utility functions for API integration
-def create_patient(name: str, age: int, height: float, weight: float,
+def create_patient(name: str, birthDate: str, height: float, weight: float,
                    lab_results: Dict = None, doctors_notes: str = "", severity: str = "low") -> Dict:
     """Create a new patient and return their data"""
     manager = PatientManager()
@@ -559,7 +559,7 @@ def filter_patients(criteria: Dict) -> Dict:
 
 
 # Async utility functions for FastAPI
-async def async_create_patient(name: str, age: int, height: float, weight: float,
+async def async_create_patient(name: str, birthDate: str, height: float, weight: float,
                                lab_results: Dict = None, doctors_notes: str = "", severity: str = "low") -> Dict:
     """Create a new patient asynchronously"""
     manager = PatientManager()

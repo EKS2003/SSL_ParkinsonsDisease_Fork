@@ -13,7 +13,7 @@ import { useToast } from '@/hooks/use-toast';
 import { Patient } from '@/types/patient';
 import apiService from '@/services/api';
 import { useApiStatus } from '@/hooks/use-api-status';
-import { getSeverityColor } from '@/lib/utils';
+import { getSeverityColor, calculateAge } from '@/lib/utils';
 
 // Remove mock data - will be fetched from API
 
@@ -30,7 +30,7 @@ const PatientList = () => {
     firstName: '',
     lastName: '',
     recordNumber: '',
-    age: '',
+    birthDate: '',
     severity: '' as Patient['severity'],
   });
 
@@ -76,7 +76,7 @@ const PatientList = () => {
     e.preventDefault();
     
     // Validate required fields
-    if (!quickFormData.firstName || !quickFormData.lastName || !quickFormData.recordNumber || !quickFormData.age || !quickFormData.severity) {
+    if (!quickFormData.firstName || !quickFormData.lastName || !quickFormData.recordNumber || !quickFormData.birthDate || !quickFormData.severity) {
       toast({
         title: "Validation Error",
         description: "Please fill in all required fields.",
@@ -90,7 +90,7 @@ const PatientList = () => {
       firstName: quickFormData.firstName,
       lastName: quickFormData.lastName,
       recordNumber: quickFormData.recordNumber,
-      age: parseInt(quickFormData.age),
+      birthDate: quickFormData.birthDate,
       height: '170 cm', // Default values for quick add
       weight: '70 kg',
       labResults: '{}',
@@ -112,7 +112,7 @@ const PatientList = () => {
           firstName: '',
           lastName: '',
           recordNumber: '',
-          age: '',
+          birthDate: '',
           severity: '' as Patient['severity'],
         });
 
@@ -206,13 +206,12 @@ const PatientList = () => {
                         />
                       </div>
                       <div className="space-y-2">
-                        <Label htmlFor="quick-age">Age *</Label>
+                        <Label htmlFor="quick-birthDate">Date of Birth *</Label>
                         <Input
-                          id="quick-age"
-                          type="number"
-                          placeholder="65"
-                          value={quickFormData.age}
-                          onChange={(e) => handleQuickFormChange('age', e.target.value)}
+                          id="quick-birthDate"
+                          type="date"
+                          value={quickFormData.birthDate}
+                          onChange={(e) => handleQuickFormChange('birthDate', e.target.value)}
                           required
                         />
                       </div>
@@ -307,7 +306,7 @@ const PatientList = () => {
                     <div className="space-y-3">
                       <div className="flex items-center text-sm text-muted-foreground">
                         <FileText className="mr-2 h-4 w-4" />
-                        Age: {patient.birthDate} years
+                        Age: {patient.birthDate ? `${calculateAge(patient.birthDate) ?? 'Unknown'} years` : 'N/A'}
                       </div>
                       <div className="flex items-center text-sm text-muted-foreground">
                         <AlertCircle className="mr-2 h-4 w-4" />
