@@ -106,6 +106,8 @@ class PatientResponse(BaseModel):
     lab_results: Dict
     doctors_notes: str
     severity: str
+    lab_results_history: Optional[List[Dict]] = []
+    doctors_notes_history: Optional[List[Dict]] = []
 
 class PatientsListResponse(BaseModel):
     success: bool
