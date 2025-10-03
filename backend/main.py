@@ -12,6 +12,15 @@ import uuid
 import json
 import base64
 import numpy as np
+from tslearn.metrics import dtw_path
+from uuid import uuid4
+from dtw_rest import router as dtw_router
+from utils_dtw import EndOnlyDTW, normalize_test_name
+
+from pathlib import Path
+
+
+
 
 # ============ Paths / Folders ============
 RECORDINGS_DIR = os.path.join(os.path.dirname(__file__), "recordings")
@@ -33,7 +42,7 @@ def _mp():
         return mp
     except Exception as e:
         raise RuntimeError(
-            "MediaPipe not available. Install mediapipe."
+            "MediaPipe not available. Install mediapipe.", e
         ) from e
 
 # ============ Patient Manager ============
@@ -47,6 +56,7 @@ from patient_manager import (
 )
 
 app = FastAPI(title="Patient Management API")
+app.include_router(dtw_router)
 
 # ============ CORS ============
 app.add_middleware(
@@ -199,6 +209,9 @@ class MPExtractor:
             return out
 
         return {"error": "Unknown model"}
+    
+
+
 
 # ============ WebSocket handler ============
 async def _camera_ws_handler(websocket: WebSocket):
@@ -208,10 +221,12 @@ async def _camera_ws_handler(websocket: WebSocket):
     fps_hint: float = 30.0
     patient_id: Optional[str] = None
     test_name: Optional[str] = None
-    model: str = "hands"      # default; client can override in "init"
+    test_id: Optional[str] = None
+    model: str = "hands"      # "hands" | "pose"
     started: bool = False
 
     mp_extractor: Optional[MPExtractor] = None
+    dtw_end: Optional[EndOnlyDTW] = None
 
     try:
         while True:
@@ -220,34 +235,58 @@ async def _camera_ws_handler(websocket: WebSocket):
             mtype = data.get("type")
 
             if mtype == "init":
-                patient_id = data.get("patientId") or data.get("patient_id")
-                test_name = data.get("testType") or data.get("test_name")
-                model = data.get("model", model)          # "hands" | "pose"
-                fps_hint = float(data.get("fps", fps_hint))
-                mp_extractor = MPExtractor(model=model)   # create once per connection
-                started = True
-                await websocket.send_json({
-                    "type": "status",
-                    "status": "initialized",
-                    "patientId": patient_id,
-                    "testName": test_name,
-                    "model": model,
-                    "fps": fps_hint
-                })
+                try:
+                    patient_id = data.get("patientId") or data.get("patient_id")
+                    raw_test = data.get("testType") or data.get("test_name")
+                    test_name = normalize_test_name(raw_test)          # canonicalize
+                    model = data.get("model", model)                   # "hands" | "pose"
+                    fps_hint = float(data.get("fps", fps_hint))
+                    test_id = data.get("testId")     # unique per test run
+                    mp_extractor = MPExtractor(model=model)
+                    dtw_end = EndOnlyDTW(test_name or "unknown", model, test_id)
+
+                    # Surface template init errors immediately
+                    if getattr(dtw_end, "init_error", None):
+                        await websocket.send_json({
+                            "type": "error",
+                            "where": "init",
+                            "message": dtw_end.init_error,
+                            "testName": test_name,
+                            "model": model
+                        })
+
+                    started = True
+                    await websocket.send_json({
+                        "type": "status",
+                        "status": "initialized",
+                        "patientId": patient_id,
+                        "testName": test_name,  # canonical test
+                        "model": model,
+                        "fps": fps_hint
+                    })
+                except Exception as e:
+                    started = False
+                    await websocket.send_json({"type": "error", "where": "init", "message": str(e)})
 
             elif mtype == "frame":
                 try:
+                    if not started or not mp_extractor:
+                        await websocket.send_json({"type": "error", "where": "frame", "message": "Not initialized"})
+                        continue
+
                     frame = _decode_base64_image(data["data"])
                     frames.append(frame)
 
-                    # Extract keypoints and send them back (normalized coords)
-                    kp = mp_extractor.process(frame) if mp_extractor else {"error": "not initialized"}
+                    kp = mp_extractor.process(frame)
+                    if dtw_end and "error" not in kp:
+                        dtw_end.push(kp)
+
                     resp = {"type": "keypoints", "model": model, "frame_idx": len(frames)}
                     resp.update(kp)
                     await websocket.send_json(resp)
 
                 except Exception as e:
-                    await websocket.send_json({"type": "error", "message": f"Frame error: {e}"})
+                    await websocket.send_json({"type": "error", "where": "frame", "message": f"{e}"})
 
             elif mtype == "pause":
                 paused = bool(data.get("paused", False))
@@ -258,31 +297,45 @@ async def _camera_ws_handler(websocket: WebSocket):
 
             elif mtype == "end":
                 if not started:
-                    await websocket.send_json({"type": "error", "message": "Test not initialized"})
+                    await websocket.send_json({"type": "error", "where": "end", "message": "Test not initialized"})
                     continue
                 if not frames:
-                    await websocket.send_json({"type": "error", "message": "No frames received"})
+                    await websocket.send_json({"type": "error", "where": "end", "message": "No frames received"})
+                    continue
+                if not dtw_end:
+                    await websocket.send_json({"type": "error", "where": "end", "message": "DTW not initialized"})
                     continue
 
-                # Save MP4 of the session
+                # Finalize DTW (returns ok=False with details if it couldn't save)
+                payload = dtw_end.finalize_and_save(meta_sidecar={"patientId": patient_id, "fps": fps_hint})
+                if not payload.get("ok"):
+                    await websocket.send_json({
+                        "type": "dtw_error",
+                        **payload,
+                        "testName": test_name,
+                        "model": model,
+                    })
+                else:
+                    await websocket.send_json({"type": "dtw_saved", **payload})
+
+                # Save MP4 & history (optional)
                 try:
                     saved_name = _save_frames_to_mp4(frames, fps=fps_hint)
                 except Exception as e:
-                    await websocket.send_json({"type": "error", "message": f"Save error: {e}"})
+                    await websocket.send_json({"type": "error", "where": "save_mp4", "message": f"{e}"})
                     frames = []
                     continue
 
-                # Optional: store test history
                 try:
                     thm = TestHistoryManager()
                     thm.add_patient_test(patient_id or "unknown", {
                         "test_name": test_name or "unknown",
-                        "date": datetime.now().isoformat(),
+                        "date": datetime.utcnow().isoformat(),
                         "recording_file": saved_name,
                         "frame_count": len(frames)
                     })
                 except Exception:
-                    pass  # non-fatal
+                    pass
 
                 await websocket.send_json({
                     "type": "complete",
@@ -292,16 +345,10 @@ async def _camera_ws_handler(websocket: WebSocket):
                     "patientId": patient_id,
                     "testName": test_name
                 })
-                frames = []  # reset for potential next session
+                frames = []
 
             else:
-                # Accepts odd inits like {"type_of_wash": "..."} if needed
-                if "type_of_wash" in data and not started:
-                    started = True
-                    mp_extractor = MPExtractor(model=model)
-                    await websocket.send_json({"type": "status", "status": "initialized"})
-                else:
-                    await websocket.send_json({"type": "error", "message": f"Unknown message: {data}"})
+                await websocket.send_json({"type": "error", "message": f"Unknown message: {data}"})
 
     except WebSocketDisconnect:
         pass
@@ -310,6 +357,7 @@ async def _camera_ws_handler(websocket: WebSocket):
             await websocket.send_json({"type": "error", "message": str(e)})
         except:
             pass
+
 
 # Primary WS endpoint: ws://.../ws/{client_id}
 @app.websocket("/ws/{client_id}")
