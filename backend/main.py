@@ -94,7 +94,9 @@ class PatientUpdate(BaseModel):
     height: Optional[str] = None
     weight: Optional[str] = None
     lab_results: Optional[Dict] = None
+    lab_results_history: Optional[List[Dict]] = None
     doctors_notes: Optional[str] = None
+    doctors_notes_history: Optional[List[Dict]] = None
     severity: Optional[str] = Field(None, pattern="^(low|medium|high)$")
 
 class PatientResponse(BaseModel):
