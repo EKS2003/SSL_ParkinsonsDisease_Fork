@@ -5,6 +5,9 @@
     "birthDate": "1965-05-19",
     "height": "170.0",
     "weight": "70.0",
+    "lab_results": {},
+    "doctors_notes": "",
+    "severity": "medium",
     "lab_results_history": [
       {
         "id": "lab_1",
@@ -22,18 +25,23 @@
     "doctors_notes_history": [
       {
         "id": "note_1",
-        "date": "2025-09-20T09:15:00Z",
+        "date": "2025-09-20T09:15:00.000Z",
         "note": "Patient shows improvement with current medication. Tremor reduced significantly.",
         "added_by": "Dr. Smith"
       },
       {
         "id": "note_2",
-        "date": "2025-08-15T16:45:00Z",
+        "date": "2025-08-15T16:45:00.000Z",
         "note": "Started on new L-DOPA regimen. Monitor for side effects.",
         "added_by": "Dr. Johnson"
+      },
+      {
+        "id": "note_1759507545239",
+        "date": "2025-10-03T16:05:45.239Z",
+        "note": "Testing",
+        "added_by": "Current User"
       }
-    ],
-    "severity": "medium"
+    ]
   },
   "marys2844332156": {
     "patient_id": "marys2844332156",
@@ -41,6 +49,9 @@
     "birthDate": "1953-03-15",
     "height": "165.0",
     "weight": "68.5",
+    "lab_results": {},
+    "doctors_notes": "",
+    "severity": "mild",
     "lab_results_history": [
       {
         "id": "lab_mary_1",
@@ -62,8 +73,7 @@
         "note": "Initial diagnosis confirmed. Starting low-dose carbidopa-levodopa.",
         "added_by": "Dr. Wilson"
       }
-    ],
-    "severity": "mild"
+    ]
   },
   "robertj3912847365": {
     "patient_id": "robertj3912847365",
@@ -71,6 +81,9 @@
     "birthDate": "1957-07-22",
     "height": "178.0",
     "weight": "82.0",
+    "lab_results": {},
+    "doctors_notes": "",
+    "severity": "medium",
     "lab_results_history": [
       {
         "id": "lab_robert_1",
@@ -98,8 +111,7 @@
         "note": "Symptoms progressing slowly. Patient handling well with current treatment.",
         "added_by": "Dr. Chen"
       }
-    ],
-    "severity": "medium"
+    ]
   },
   "lindaw4578293617": {
     "patient_id": "lindaw4578293617",
@@ -107,6 +119,9 @@
     "birthDate": "1964-11-08",
     "height": "162.0",
     "weight": "59.0",
+    "lab_results": {},
+    "doctors_notes": "",
+    "severity": "severe",
     "lab_results_history": [
       {
         "id": "lab_linda_1",
@@ -134,8 +149,7 @@
         "note": "Balance issues becoming more prominent. Consider adding amantadine.",
         "added_by": "Dr. Rodriguez"
       }
-    ],
-    "severity": "severe"
+    ]
   },
   "davidb5234876921": {
     "patient_id": "davidb5234876921",
@@ -143,6 +157,9 @@
     "birthDate": "1951-02-14",
     "height": "175.0",
     "weight": "77.0",
+    "lab_results": {},
+    "doctors_notes": "",
+    "severity": "severe",
     "lab_results_history": [
       {
         "id": "lab_david_1",
@@ -164,8 +181,7 @@
         "note": "Disease progression evident since initial diagnosis. Motor fluctuations becoming more pronounced.",
         "added_by": "Dr. Anderson"
       }
-    ],
-    "severity": "severe"
+    ]
   },
   "susand6789123457": {
     "patient_id": "susand6789123457",
@@ -173,6 +189,10 @@
     "birthDate": "1967-09-12",
     "height": "168.0",
     "weight": "65.0",
+    "lab_results": {},
+    "doctors_notes": "",
+    "severity": "mild",
+    "lab_results_history": [],
     "doctors_notes_history": [
       {
         "id": "note_susan_1",
@@ -180,8 +200,7 @@
         "note": "Recently diagnosed, minimal symptoms. Patient adjusting well to initial medication regimen.",
         "added_by": "Dr. Taylor"
       }
-    ],
-    "severity": "mild"
+    ]
   },
   "michaelm7456821093": {
     "patient_id": "michaelm7456821093",
@@ -189,6 +208,9 @@
     "birthDate": "1956-04-03",
     "height": "183.0",
     "weight": "85.0",
+    "lab_results": {},
+    "doctors_notes": "",
+    "severity": "medium",
     "lab_results_history": [
       {
         "id": "lab_michael_1",
@@ -216,8 +238,7 @@
         "note": "First occurrence of freezing episodes noted. Patient education provided on management techniques.",
         "added_by": "Dr. Park"
       }
-    ],
-    "severity": "medium"
+    ]
   },
   "nancyw8321654987": {
     "patient_id": "nancyw8321654987",
@@ -225,6 +246,9 @@
     "birthDate": "1959-08-27",
     "height": "160.0",
     "weight": "72.0",
+    "lab_results": {},
+    "doctors_notes": "",
+    "severity": "medium",
     "lab_results_history": [],
     "doctors_notes_history": [
       {
@@ -239,8 +263,7 @@
         "note": "Family reports mild memory issues. Cognitive screening scheduled.",
         "added_by": "Dr. Roberts"
       }
-    ],
-    "severity": "medium"
+    ]
   },
   "jamesm9876543210": {
     "patient_id": "jamesm9876543210",
@@ -248,6 +271,9 @@
     "birthDate": "1954-01-16",
     "height": "172.0",
     "weight": "74.0",
+    "lab_results": {},
+    "doctors_notes": "",
+    "severity": "medium",
     "lab_results_history": [],
     "doctors_notes_history": [
       {
@@ -262,8 +288,7 @@
         "note": "Patient reports frequent nighttime awakenings and REM sleep behavior disorder symptoms.",
         "added_by": "Dr. Clark"
       }
-    ],
-    "severity": "medium"
+    ]
   },
   "patriciaa1234567890": {
     "patient_id": "patriciaa1234567890",
@@ -271,6 +296,9 @@
     "birthDate": "1962-06-30",
     "height": "157.0",
     "weight": "61.0",
+    "lab_results": {},
+    "doctors_notes": "",
+    "severity": "mild",
     "lab_results_history": [
       {
         "id": "lab_patricia_1",
@@ -304,8 +332,7 @@
         "note": "DBS surgery successful. Initial programming session scheduled.",
         "added_by": "Dr. Kumar"
       }
-    ],
-    "severity": "mild"
+    ]
   },
   "charlesg2345678901": {
     "patient_id": "charlesg2345678901",
@@ -313,6 +340,9 @@
     "birthDate": "1958-12-05",
     "height": "180.0",
     "weight": "80.0",
+    "lab_results": {},
+    "doctors_notes": "",
+    "severity": "severe",
     "lab_results_history": [
       {
         "id": "lab_charles_1",
@@ -340,8 +370,7 @@
         "note": "Medication adjustment needed due to increased rigidity on both sides. Patient struggling with daily activities.",
         "added_by": "Dr. Lee"
       }
-    ],
-    "severity": "severe"
+    ]
   },
   "barbarah3456789012": {
     "patient_id": "barbarah3456789012",
@@ -349,6 +378,9 @@
     "birthDate": "1955-10-18",
     "height": "163.0",
     "weight": "58.0",
+    "lab_results": {},
+    "doctors_notes": "",
+    "severity": "medium",
     "lab_results_history": [
       {
         "id": "lab_1",
@@ -361,7 +393,6 @@
         "added_by": "Dr. Wilson"
       }
     ],
-    "doctors_notes": "",
     "doctors_notes_history": [
       {
         "id": "note_1",
@@ -375,8 +406,7 @@
         "note": "Speech difficulties developing as expected with disease progression. Starting speech therapy next week.",
         "added_by": "Dr. Wilson"
       }
-    ],
-    "severity": "medium"
+    ]
   },
   "thomast4567890123": {
     "patient_id": "thomast4567890123",
@@ -384,6 +414,9 @@
     "birthDate": "1961-03-24",
     "height": "176.0",
     "weight": "78.0",
+    "lab_results": {},
+    "doctors_notes": "",
+    "severity": "mild",
     "lab_results_history": [
       {
         "id": "lab_1",
@@ -397,7 +430,6 @@
         "added_by": "Dr. Martinez"
       }
     ],
-    "doctors_notes": "",
     "doctors_notes_history": [
       {
         "id": "note_1",
@@ -411,8 +443,7 @@
         "note": "Active lifestyle maintained despite diagnosis. Excellent physical condition for age and condition.",
         "added_by": "Dr. Martinez"
       }
-    ],
-    "severity": "mild"
+    ]
   },
   "elizabethc5678901234": {
     "patient_id": "elizabethc5678901234",
@@ -420,9 +451,11 @@
     "birthDate": "1950-05-07",
     "height": "159.0",
     "weight": "64.0",
-    "lab_results_history": [],
+    "lab_results": {},
     "doctors_notes": "Advanced stage, caregiver support in place",
-    "severity": "severe"
+    "severity": "severe",
+    "lab_results_history": [],
+    "doctors_notes_history": []
   },
   "kennethl6789012345": {
     "patient_id": "kennethl6789012345",
@@ -430,6 +463,9 @@
     "birthDate": "1963-11-13",
     "height": "174.0",
     "weight": "73.0",
+    "lab_results": {},
+    "doctors_notes": "",
+    "severity": "mild",
     "lab_results_history": [
       {
         "id": "lab_kenneth_1",
@@ -457,8 +493,7 @@
         "note": "Young onset Parkinson's suspected. Family history positive. Genetic testing initiated.",
         "added_by": "Dr. Patel"
       }
-    ],
-    "severity": "mild"
+    ]
   },
   "deborahw7890123456": {
     "patient_id": "deborahw7890123456",
@@ -466,9 +501,11 @@
     "birthDate": "1956-07-09",
     "height": "166.0",
     "weight": "67.0",
-    "lab_results_history": [],
+    "lab_results": {},
     "doctors_notes": "Tremor-dominant phenotype",
-    "severity": "medium"
+    "severity": "medium",
+    "lab_results_history": [],
+    "doctors_notes_history": []
   },
   "paulh8901234567": {
     "patient_id": "paulh8901234567",
@@ -476,9 +513,11 @@
     "birthDate": "1952-04-21",
     "height": "169.0",
     "weight": "71.0",
-    "lab_results_history": [],
+    "lab_results": {},
     "doctors_notes": "Non-motor symptoms predominant",
-    "severity": "medium"
+    "severity": "medium",
+    "lab_results_history": [],
+    "doctors_notes_history": []
   },
   "heleny9012345678": {
     "patient_id": "heleny9012345678",
@@ -486,6 +525,9 @@
     "birthDate": "1960-02-28",
     "height": "161.0",
     "weight": "60.0",
+    "lab_results": {},
+    "doctors_notes": "",
+    "severity": "medium",
     "lab_results_history": [
       {
         "id": "lab_helen_1",
@@ -513,8 +555,7 @@
         "note": "Depression symptoms identified during routine visit. PHQ-9 score: 14. Referral to psychiatrist considered.",
         "added_by": "Dr. Brown"
       }
-    ],
-    "severity": "medium"
+    ]
   },
   "markk0123456789": {
     "patient_id": "markk0123456789",
@@ -522,9 +563,11 @@
     "birthDate": "1965-09-11",
     "height": "181.0",
     "weight": "84.0",
-    "lab_results_history": [],
+    "lab_results": {},
     "doctors_notes": "Participating in clinical trial",
-    "severity": "mild"
+    "severity": "mild",
+    "lab_results_history": [],
+    "doctors_notes_history": []
   },
   "dorisg1234567890": {
     "patient_id": "dorisg1234567890",
@@ -532,9 +575,11 @@
     "birthDate": "1948-12-03",
     "height": "158.0",
     "weight": "55.0",
-    "lab_results_history": [],
+    "lab_results": {},
     "doctors_notes": "Significant motor fluctuations",
-    "severity": "severe"
+    "severity": "severe",
+    "lab_results_history": [],
+    "doctors_notes_history": []
   },
   "stevens2345678901": {
     "patient_id": "stevens2345678901",
@@ -542,8 +587,10 @@
     "birthDate": "1959-01-25",
     "height": "177.0",
     "weight": "79.0",
-    "lab_results_history": [],
+    "lab_results": {},
     "doctors_notes": "Stable on current medication regimen",
-    "severity": "mild"
+    "severity": "mild",
+    "lab_results_history": [],
+    "doctors_notes_history": []
   }
 }

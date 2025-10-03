@@ -331,8 +331,12 @@ class PatientManager:
                     patient.weight = float(weight_value)
             if "lab_results" in updated_data:
                 patient.lab_results = updated_data["lab_results"]
+            if "lab_results_history" in updated_data:
+                patient.lab_results_history = updated_data["lab_results_history"]
             if "doctors_notes" in updated_data:
                 patient.doctors_notes = updated_data["doctors_notes"]
+            if "doctors_notes_history" in updated_data:
+                patient.doctors_notes_history = updated_data["doctors_notes_history"]
             if "severity" in updated_data:
                 patient.severity = updated_data["severity"]
 
