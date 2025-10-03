@@ -20,19 +20,6 @@ type MPPosePoint = { x: number; y: number; z?: number; v?: number };
 
 // --- WebSocket URL builder
 const WS_PATH = "/ws/camera";
-
-// Option A: set VITE_API_BASE (e.g., http://localhost:8000)
-// Option B: use a Vite WS proxy for "/ws"
-/*
-const wsURL = () => {
-  const apiBase = (import.meta as any).env?.VITE_API_BASE ?? 'http://localhost:8000';
-  const u = new URL(apiBase);
-  u.protocol = u.protocol === 'https:' ? 'wss:' : 'ws:';
-  u.pathname = (u.pathname.replace(/\/+$/, '') + WS_PATH);
-  return u.toString();
-};
-*/
-
 const wsURL = () => new URL(WS_PATH, window.location.origin).toString();
 
 const modelForTest = (testId?: string) => {
@@ -46,6 +33,8 @@ const modelForTest = (testId?: string) => {
       return "hands";
   }
 };
+
+const MIN_RECORDING_TIME = 35; // seconds
 
 const VideoRecording = () => {
   const { id, testId } = useParams<{ id: string; testId: string }>();
@@ -351,6 +340,17 @@ const VideoRecording = () => {
   };
 
   const handleStopRecording = async () => {
+    // Enforce minimum time (double-safety; Stop button is also disabled until met)
+    if (recordingTime < MIN_RECORDING_TIME) {
+      const remaining = MIN_RECORDING_TIME - recordingTime;
+      toast({
+        title: "Recording Too Short",
+        description: `Please record at least ${MIN_RECORDING_TIME} seconds. ${remaining}s remaining.`,
+        variant: "destructive",
+      });
+      return;
+    }
+
     if (!mediaRecorderRef.current) return;
 
     wsEndAndClose();
@@ -464,6 +464,9 @@ const VideoRecording = () => {
     }
   };
 
+  const minRemaining = Math.max(0, MIN_RECORDING_TIME - recordingTime);
+  const minMet = minRemaining === 0;
+
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
@@ -488,8 +491,27 @@ const VideoRecording = () => {
               </div>
             </div>
             <div className="text-right">
-              <div className="text-2xl font-bold text-primary">
-                {formatTime(recordingTime)}
+              <div className="flex items-center justify-end gap-2">
+                <div className="text-2xl font-bold text-primary">
+                  {formatTime(recordingTime)}
+                </div>
+                <Badge
+                  variant="secondary"
+                  className={
+                    minMet
+                      ? "bg-green-600 text-white"
+                      : "bg-yellow-500 text-black"
+                  }
+                  title={
+                    minMet
+                      ? "Minimum met"
+                      : `Minimum recording time required: ${MIN_RECORDING_TIME}s`
+                  }
+                >
+                  {minMet
+                    ? "Min met"
+                    : `Min ${formatTime(MIN_RECORDING_TIME)} · ${minRemaining}s left`}
+                </Badge>
               </div>
               <Progress value={progress} className="w-32 mt-2" />
             </div>
@@ -566,6 +588,13 @@ const VideoRecording = () => {
                         </div>
                       )
                     )}
+                  <div className="mt-3 text-xs text-muted-foreground">
+                    Note: A minimum recording length of{" "}
+                    <span className="font-semibold">
+                      {formatTime(MIN_RECORDING_TIME)}
+                    </span>{" "}
+                    is required before you can stop.
+                  </div>
                 </div>
               </CardContent>
             </Card>
@@ -622,38 +651,57 @@ const VideoRecording = () => {
                   />
                 </div>
 
-                <div className="flex justify-center space-x-4">
-                  {!isRecording ? (
-                    <Button
-                      onClick={handleStartRecording}
-                      className="bg-[hsl(var(--secondary))] text-black hover:bg-[hsl(var(--primary-hover))] hover:text-white"
-                    >
-                      <Play className="mr-2 h-4 w-4" />
-                      Start Recording
-                    </Button>
-                  ) : (
-                    <>
-                      <Button onClick={handlePauseRecording} variant="outline">
-                        {isPaused ? (
-                          <Play className="mr-2 h-4 w-4" />
-                        ) : (
-                          <Pause className="mr-2 h-4 w-4" />
-                        )}
-                        {isPaused ? "Resume" : "Pause"}
-                      </Button>
+                <div className="flex flex-col items-center gap-2">
+                  <div
+                    className={`text-sm ${
+                      minMet ? "text-green-600" : "text-yellow-600"
+                    }`}
+                    aria-live="polite"
+                  >
+                    {minMet
+                      ? "Minimum recording time reached — you can stop now."
+                      : `Please record at least ${MIN_RECORDING_TIME}s. ${minRemaining}s remaining.`}
+                  </div>
+
+                  <div className="flex justify-center space-x-4">
+                    {!isRecording ? (
                       <Button
-                        onClick={handleStopRecording}
-                        variant="destructive"
+                        onClick={handleStartRecording}
+                        className="bg-[hsl(var(--secondary))] text-black hover:bg-[hsl(var(--primary-hover))] hover:text-white"
                       >
-                        <Square className="mr-2 h-4 w-4" />
-                        Stop
+                        <Play className="mr-2 h-4 w-4" />
+                        Start Recording
                       </Button>
-                      <Button onClick={handleReset} variant="outline">
-                        <RotateCcw className="mr-2 h-4 w-4" />
-                        Reset
-                      </Button>
-                    </>
-                  )}
+                    ) : (
+                      <>
+                        <Button onClick={handlePauseRecording} variant="outline">
+                          {isPaused ? (
+                            <Play className="mr-2 h-4 w-4" />
+                          ) : (
+                            <Pause className="mr-2 h-4 w-4" />
+                          )}
+                          {isPaused ? "Resume" : "Pause"}
+                        </Button>
+                        <Button
+                          onClick={handleStopRecording}
+                          variant="destructive"
+                          disabled={!minMet}
+                          title={
+                            minMet
+                              ? "Stop and save recording"
+                              : "Reach minimum time before stopping"
+                          }
+                        >
+                          <Square className="mr-2 h-4 w-4" />
+                          Stop
+                        </Button>
+                        <Button onClick={handleReset} variant="outline">
+                          <RotateCcw className="mr-2 h-4 w-4" />
+                          Reset
+                        </Button>
+                      </>
+                    )}
+                  </div>
                 </div>
 
                 {completedTests.includes(selectedTests[currentTestIndex]) && (

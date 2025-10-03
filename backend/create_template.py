@@ -20,7 +20,10 @@ import mediapipe as mp
 
 # -------------------- Feature extraction --------------------
 def hands_features(lm) -> np.ndarray | None:
-    # lm: mp.framework.formats.landmark_pb2.NormalizedLandmarkList
+    """
+    FULL Mediapipe hands (21 landmarks) -> 42D feature.
+    Origin = wrist (0). Scale = distance wrist(0) -> middle MCP(9).
+    """
     if lm is None or len(lm.landmark) < 21:
         return None
     pts = np.array([[p.x, p.y] for p in lm.landmark], dtype=np.float32)  # (21,2)

@@ -1,5 +1,6 @@
 # backend/utils_dtw.py
 from __future__ import annotations
+
 import json
 from uuid import uuid4
 from datetime import datetime
@@ -58,12 +59,19 @@ class TemplateLibrary:
 
 # ================== FEATURE EXTRACTION ==================
 def _hands_features(kp: Dict) -> Optional[np.ndarray]:
+    """
+    Use ALL Mediapipe hand landmarks (21).
+    - Origin: wrist (id 0)
+    - Scale: distance wrist->middle MCP (id 9)
+    - Output: flattened 42D vector (21*2)
+    """
     hands = kp.get("hands", [])
     if not hands:
         return None
     lm = hands[0].get("landmarks", [])
     if len(lm) < 21:
         return None
+
     pts = np.array([[p["x"], p["y"]] for p in lm], dtype=np.float32)  # (21,2)
     ref = pts[0]                                  # wrist
     rel = pts - ref                               # translation-invariant

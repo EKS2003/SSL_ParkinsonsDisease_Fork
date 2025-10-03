@@ -113,6 +113,30 @@
       "date": "2025-10-03T13:49:12.493877",
       "recording_file": "ws_recording_2025-10-03_09-49-12_322d48bf-d7fc-404d-bc9d-66d2cf0fe3aa.mp4",
       "frame_count": 54
+    },
+    {
+      "test_name": "stand-and-sit",
+      "date": "2025-10-03T13:59:41.708626",
+      "recording_file": "ws_recording_2025-10-03_09-59-41_27cf0361-0629-4ab1-8eb7-5ef7029b60fc.mp4",
+      "frame_count": 69
+    },
+    {
+      "test_name": "finger-tapping",
+      "date": "2025-10-03T14:00:03.178458",
+      "recording_file": "ws_recording_2025-10-03_10-00-03_a0c3c8f4-ec9b-4397-b93c-43422dcf81d3.mp4",
+      "frame_count": 67
+    },
+    {
+      "test_name": "finger-tapping",
+      "date": "2025-10-03T15:46:28.876699",
+      "recording_file": "ws_recording_2025-10-03_11-46-28_b5dcc1e0-4104-49b9-8f5d-73332dff7e26.mp4",
+      "frame_count": 80
+    },
+    {
+      "test_name": "finger-tapping",
+      "date": "2025-10-03T15:47:05.174328",
+      "recording_file": "ws_recording_2025-10-03_11-47-04_4f801904-87a8-475f-a2e7-22d46caf500b.mp4",
+      "frame_count": 469
     }
   ],
   "marys2844332156": [
@@ -193,6 +217,90 @@
       "date": "2025-10-03T05:42:16.898463",
       "recording_file": "ws_recording_2025-10-03_01-42-16_6fee8438-6878-4176-a215-9ce15aa87759.mp4",
       "frame_count": 209
+    },
+    {
+      "test_name": "finger-tapping",
+      "date": "2025-10-03T14:21:35.479167",
+      "recording_file": "ws_recording_2025-10-03_10-21-35_0934704f-39e9-4cf8-a4a7-e5dc9d2705c7.mp4",
+      "frame_count": 103
+    },
+    {
+      "test_name": "finger-tapping",
+      "date": "2025-10-03T14:23:36.771201",
+      "recording_file": "ws_recording_2025-10-03_10-23-36_be85bf51-a906-4a2d-9915-6db09f49b67c.mp4",
+      "frame_count": 35
+    },
+    {
+      "test_name": "finger-tapping",
+      "date": "2025-10-03T14:33:49.164332",
+      "recording_file": "ws_recording_2025-10-03_10-33-48_7fbdac80-afbc-4cb9-bf00-bb7ec688247e.mp4",
+      "frame_count": 63
+    },
+    {
+      "test_name": "finger-tapping",
+      "date": "2025-10-03T14:35:43.276563",
+      "recording_file": "ws_recording_2025-10-03_10-35-42_e8b378b3-93b0-4073-ab24-d64630b6ea8e.mp4",
+      "frame_count": 527
+    },
+    {
+      "test_name": "finger-tapping",
+      "date": "2025-10-03T15:02:51.852624",
+      "recording_file": "ws_recording_2025-10-03_11-02-50_58738f27-1ab2-4cdc-9bdd-cbdfed5cbc39.mp4",
+      "frame_count": 465
+    },
+    {
+      "test_name": "finger-tapping",
+      "date": "2025-10-03T15:24:57.491755",
+      "recording_file": "ws_recording_2025-10-03_11-24-56_918c4d3a-0a17-44ed-bdce-72a07d70b117.mp4",
+      "frame_count": 488
+    },
+    {
+      "test_name": "finger-tapping",
+      "date": "2025-10-03T15:34:44.093449",
+      "recording_file": "ws_recording_2025-10-03_11-34-43_6a2988bb-ec88-4755-9042-5169db3a9ed0.mp4",
+      "frame_count": 480
+    },
+    {
+      "test_name": "finger-tapping",
+      "date": "2025-10-03T15:38:53.361126",
+      "recording_file": "ws_recording_2025-10-03_11-38-52_a476113c-7274-47b8-bc19-2b64fa861ffa.mp4",
+      "frame_count": 497
+    },
+    {
+      "test_name": "finger-tapping",
+      "date": "2025-10-03T15:56:43.088561",
+      "recording_file": "ws_recording_2025-10-03_11-56-42_549fde9a-7b0d-4127-893f-91bf722ab760.mp4",
+      "frame_count": 128
+    },
+    {
+      "test_name": "finger-tapping",
+      "date": "2025-10-03T15:57:26.216662",
+      "recording_file": "ws_recording_2025-10-03_11-57-25_c5709318-7972-492b-93bd-647cb199209b.mp4",
+      "frame_count": 506
+    },
+    {
+      "test_name": "finger-tapping",
+      "date": "2025-10-03T16:09:10.359438",
+      "recording_file": "ws_recording_2025-10-03_12-09-10_5219d759-f490-494f-8692-b53f5600b0dc.mp4",
+      "frame_count": 100
+    },
+    {
+      "test_name": "finger-tapping",
+      "date": "2025-10-03T16:09:50.406983",
+      "recording_file": "ws_recording_2025-10-03_12-09-49_2794f025-6cd5-41a4-93a1-9f9bed8b0dc0.mp4",
+      "frame_count": 502
+    },
+    {
+      "test_name": "finger-tapping",
+      "date": "2025-10-03T16:14:48.933469",
+      "recording_file": "ws_recording_2025-10-03_12-14-47_882a66d4-3172-4262-b97d-e7f80bbf7f00.mp4",
+      "frame_count": 479
+    },
+    {
+      "test_name": "fist-open-close",
+      "date": "2025-10-03T16:21:02.038717",
+      "recording_file": "ws_recording_2025-10-03_12-21-00_c7b7b097-b2ac-484a-9e1c-377a7cf7c77d.mp4",
+      "frame_count": 523
     }
   ],
   "lindaw4578293617": [
