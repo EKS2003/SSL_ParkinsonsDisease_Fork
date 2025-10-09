@@ -8,5 +8,47 @@
     "lab_results": {},
     "doctors_notes": "",
     "severity": "medium"
+  },
+  "testp1759999216": {
+    "patient_id": "testp1759999216",
+    "name": "Test Patient",
+    "age": 35,
+    "height": "170.0",
+    "weight": "70.0",
+    "lab_results": {},
+    "doctors_notes": "",
+    "severity": "Stage 1"
+  },
+  "johnd1759999266": {
+    "patient_id": "johnd1759999266",
+    "name": "John Doe",
+    "age": 34,
+    "height": "175.0",
+    "weight": "80.0",
+    "lab_results": {},
+    "doctors_notes": "Test notes",
+    "severity": "Stage 2"
+  },
+  "johns1759999595": {
+    "patient_id": "johns1759999595",
+    "name": "John Smith",
+    "age": 30,
+    "height": "175.0",
+    "weight": "75.0",
+    "lab_results": {},
+    "doctors_notes": "",
+    "severity": "Stage 2"
+  },
+  "carlo1759999721": {
+    "patient_id": "carlo1759999721",
+    "name": "Carlos Mendez",
+    "age": 20,
+    "height": "58.0",
+    "weight": "145.0",
+    "lab_results": {
+      "notes": "n/a"
+    },
+    "doctors_notes": "n/a",
+    "severity": "Stage 1"
   }
 }

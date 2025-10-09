@@ -10,6 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { useToast } from '@/hooks/use-toast';
 import { Patient } from '@/types/patient';
 import apiService from '@/services/api';
+import { calculateAge } from '@/lib/utils';
 
 const PatientForm = () => {
   const navigate = useNavigate();
@@ -28,6 +29,8 @@ const PatientForm = () => {
     doctorNotes: '',
     severity: '' as Patient['severity'],
   });
+  // Calculate age from birthDate
+  const age = formData.birthDate ? calculateAge(formData.birthDate) : '';
   const [loading, setLoading] = useState(false);
 
   const handleInputChange = (field: string, value: string) => {
@@ -50,7 +53,7 @@ const PatientForm = () => {
           firstName: patient.firstName,
           lastName: patient.lastName,
           recordNumber: patient.recordNumber,
-          birthDate: patient.age.toString(),
+          birthDate: patient.birthDate,
           height: patient.height,
           weight: patient.weight,
           labResults: patient.labResults,
@@ -86,7 +89,7 @@ const PatientForm = () => {
         firstName: formData.firstName,
         lastName: formData.lastName,
         recordNumber: formData.recordNumber,
-        birthDate: (formData.birthDate),
+        birthDate: (formData.birthDate) || 'MM/DD/YYYY',
         height: formData.height || '170 cm',
         weight: formData.weight || '70 kg',
         labResults: formData.labResults || '{}',
@@ -209,16 +212,25 @@ const PatientForm = () => {
                   </div>
 
                   <div className="space-y-2">
-                    <Label htmlFor="age">Age *</Label>
+                    <Label htmlFor="birthDate">Birth Date *</Label>
                     <Input
-                      id="age"
-                      type="number"
-                      placeholder="Enter age"
+                      id="birthDate"
+                      type="date"
+                      placeholder="Enter Birth Date"
                       value={formData.birthDate}
-                      onChange={(e) => handleInputChange('age', e.target.value)}
+                      onChange={(e) => handleInputChange('birthDate', e.target.value)}
                       required
                     />
                   </div>
+                  {/* <div className="space-y-2">
+                    <Label htmlFor="age">Age</Label>
+                    <Input
+                      id="age"
+                      value={age}
+                      readOnly
+                      disabled
+                    />
+                  </div> */}
 
                   <div className="space-y-2">
                     <Label htmlFor="height">Height</Label>

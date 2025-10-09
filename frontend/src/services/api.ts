@@ -1,3 +1,4 @@
+import { calculateAge } from "@/lib/utils";
 
 const API_BASE_URL = 'http://localhost:8000';
 
@@ -6,6 +7,7 @@ interface BackendPatient {
   patient_id: string;
   name: string;
   birthDate: string;
+  age: number;
   height: number;
   weight: number;
   lab_results: Record<string, any>;
@@ -15,7 +17,7 @@ interface BackendPatient {
 
 interface BackendPatientCreate {
   name: string;
-  birthDate: string;
+  age: number;
   height: string;
   weight: string;
   lab_results?: Record<string, any>;
@@ -26,6 +28,7 @@ interface BackendPatientCreate {
 interface BackendPatientUpdate {
   name?: string;
   birthDate?: string;
+  age?: number;
   height?: string;
   weight?: string;
   lab_results?: Record<string, any>;
@@ -57,7 +60,7 @@ const convertBackendToFrontend = (backendPatient: BackendPatient) => {
     weight: `${backendPatient.weight || 0} kg`,
     labResults: JSON.stringify(backendPatient.lab_results || {}),
     doctorNotes: backendPatient.doctors_notes || '',
-    severity: mapSeverity(backendPatient.severity || 'low'),
+    severity: mapSeverity(backendPatient.severity || 'stage 1'),
     createdAt: new Date(), // Backend doesn't provide this, using current date
     updatedAt: new Date(), // Backend doesn't provide this, using current date
   };
@@ -70,52 +73,44 @@ const convertFrontendToBackend = (frontendPatient: any): BackendPatientCreate =>
   const heightStr = (frontendPatient.height || '').replace(/[^\d.]/g, '');
   const weightStr = (frontendPatient.weight || '').replace(/[^\d.]/g, '');
   
+  // Calculate age from birthDate
+  const age = frontendPatient.birthDate ? calculateAge(frontendPatient.birthDate) : 0;
+  
+  // Parse lab results safely
+  let labResults = {};
+  if (frontendPatient.labResults) {
+    try {
+      labResults = typeof frontendPatient.labResults === 'string' 
+        ? JSON.parse(frontendPatient.labResults) 
+        : frontendPatient.labResults;
+    } catch (error) {
+      console.error('Error parsing labResults:', error);
+      labResults = { notes: frontendPatient.labResults };
+    }
+  }
+  
   return {
     name: fullName,
-    birthDate: frontendPatient.birthDate,
-    height: heightStr || '0', // Keep as string for create endpoint
-    weight: weightStr || '0', // Keep as string for create endpoint
-    lab_results: frontendPatient.labResults ? JSON.parse(frontendPatient.labResults) : {},
+    age: Math.max(0, age), // Ensure age is never negative
+    height: heightStr || '0',
+    weight: weightStr || '0',
+    lab_results: labResults,
     doctors_notes: frontendPatient.doctorNotes || '',
-    severity: mapSeverityToBackend(frontendPatient.severity),
+    severity: mapSeverityToBackend(frontendPatient.severity) || 'Stage 1',
   };
 };
 
-// Map severity from backend to frontend
-export const mapSeverity = (backendSeverity: string): 'Stage 1' | 'Stage 2' | 'Stage 3' | 'Stage 4' | 'Stage 5' => {
-  switch (backendSeverity.toLowerCase()) {
-    case 'Stage 1':
-      return 'Stage 1';
-    case 'Stage 2':
-      return 'Stage 2';
-    case 'Stage 3':
-      return 'Stage 3';
-    case 'Stage 4':
-      return 'Stage 4';
-    case 'Stage 5':
-      return 'Stage 5';
-    default:
-      return 'Stage 1';
-  }
+const VALID_SEVERITY_LEVELS = ['Stage 1', 'Stage 2', 'Stage 3', 'Stage 4', 'Stage 5'] as const;
+type SeverityLevel = typeof VALID_SEVERITY_LEVELS[number];
+
+export const mapSeverity = (severity: string): SeverityLevel => {
+  const normalized = severity.trim();
+  return VALID_SEVERITY_LEVELS.includes(normalized as SeverityLevel) 
+    ? normalized as SeverityLevel 
+    : 'Stage 1';
 };
 
-// Map severity from frontend to backend
-const mapSeverityToBackend = (frontendSeverity: string): string => {
-  switch (frontendSeverity) {
-    case 'Stage 1':
-      return 'Stage 1';
-    case 'Stage 2':
-      return 'Stage 2';
-    case 'Stage 3':
-      return 'Stage 3';
-    case 'Stage 4':
-      return 'Stage 4';
-    case 'Stage 5':
-      return 'Stage 5';
-    default:
-      return 'Stage 1';
-  }
-};
+const mapSeverityToBackend = mapSeverity;
 
 // API service class
 class ApiService {

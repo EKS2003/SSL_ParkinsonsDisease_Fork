@@ -52,7 +52,7 @@ class PatientCreate(BaseModel):
     weight: str = Field(..., min_length=1)
     lab_results: Optional[Dict] = Field(default_factory=dict)
     doctors_notes: Optional[str] = ""
-    severity: str = Field("low", pattern="^(low|medium|high)$")
+    severity: str = Field("Stage 1", pattern="^(Stage [1-5])$")
 
 
 class PatientUpdate(BaseModel):
@@ -62,7 +62,7 @@ class PatientUpdate(BaseModel):
     weight: Optional[str] = None
     lab_results: Optional[Dict] = None
     doctors_notes: Optional[str] = None
-    severity: Optional[str] = Field(None, pattern="^(low|medium|high)$")
+    severity: Optional[str] = Field(None, pattern="^(Stage [1-5])$")
 
 
 class PatientResponse(BaseModel):
