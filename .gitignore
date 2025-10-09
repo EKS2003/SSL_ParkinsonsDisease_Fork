@@ -31,3 +31,9 @@ dist-ssr
 
 #json files
 *.json
+
+#media files
+*.mp4
+*.mkv
+*.avi
+*.mov
