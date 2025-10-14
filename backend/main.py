@@ -12,7 +12,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, Session
 
 
-from repo.sql_models import Base, Patient, Visit
+from repo.sql_models import Base, Patient, Visit, TestResult
 from repo.patient_repository import PatientRepository
 from repo.visit_repository import VisitRepository
 from repo.excel_to_repository import ExcelToRepository
@@ -31,6 +31,8 @@ from schema.visit_schema import (
     VisitResponse,
     VisitsListResponse,
 )
+
+from repo.test_repository import TestResultRepository
 
 from test_history_manager import TestHistoryManager
 
@@ -123,18 +125,22 @@ async def create_patient(payload: PatientCreate, db: Session = Depends(get_db)):
 
 @app.get("/patients/", response_model=PatientsListResponse)
 async def get_patients(
-        skip: int = Query(0, ge=0),
-        limit: int = Query(100, ge=1, le=1000),
-        db: Session = Depends(get_db)
+    skip: int = Query(0, ge=0),
+    limit: int = Query(100, ge=1),
+    db: Session = Depends(get_db),
 ):
     repo = PatientRepository(db)
-    patients = repo.list(skip=skip, limit=limit)
-    return PatientsListResponse(
-        success=True,
-        patients=patients,
-        total=len(patients)
-        )
+    patients = repo.list(skip=skip, limit=limit)   # returns List[Patient]
+    total = repo.count()
 
+    # IMPORTANT: return exactly what PatientsListResponse expects.
+    return {
+        "success": True,          # keep only if included in schema
+        "patients": patients,     # Pydantic v2 will read attrs via from_attributes
+        "total": total,
+        "skip": skip,
+        "limit": limit,
+    }
 @app.get("/patients/{patient_id}", response_model=PatientResponse)
 async def get_patient(patient_id: str, db: Session = Depends(get_db)):
     repo = PatientRepository(db)
@@ -251,17 +257,35 @@ async def start_test(patient_id: str = Form(...), test_name: str = Form(...)):
 
 ## Frontend -> Backend() -> Frontend 
 @app.get("/patients/{patient_id}/tests", response_model=Dict)
-async def get_patient_tests(patient_id: str):
-    thm = TestHistoryManager()
-    tests = thm.get_patient_tests(patient_id)
-    return {"success": True, "tests": tests}
+async def get_patient_tests(patient_id: str, db: Session = Depends(get_db)):
+    repo = TestResultRepository(db)
+    tests = repo.get_by_patient(patient_id)
+
+    if tests is None:
+        raise HTTPException(status_code=404, detail="Patient not found or no tests available")
+
+    # Convert SQLAlchemy objects to dicts for response
+    tests_list = [t.__dict__ for t in tests]
+    for t in tests_list:
+        t.pop("_sa_instance_state", None)
+
+    return {"success": True, "tests": tests_list}
+
 
 @app.post("/patients/{patient_id}/tests", response_model=Dict)
-async def add_patient_test(patient_id: str, test_data: dict = Body(...)):
-    thm = TestHistoryManager()
-    thm.add_patient_test(patient_id, test_data)
-    return {"success": True}
+async def add_patient_test(patient_id: str, test_data: dict = Body(...), db: Session = Depends(get_db)):
+    repo = TestResultRepository(db)
 
+    new_test = TestResult(
+        patient_id=patient_id,
+        test_type=test_data.get("test_type"),
+        test_date=test_data.get("test_date"),
+        keypoints=None
+    )
+
+    repo.add(new_test)
+
+    return {"success": True, "test_id": new_test.test_id}
 
 @app.post("/visit/", response_model=Dict)
 async def create_visit(payload: VisitCreate, db: Session = Depends(get_db)):

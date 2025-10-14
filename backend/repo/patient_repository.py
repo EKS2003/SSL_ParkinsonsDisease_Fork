@@ -61,5 +61,8 @@ class PatientRepository:
             cutoff_date = date.today() - timedelta(days=criteria.max_age * 365.25)
             query = query.filter(Patient.dob >= cutoff_date)
         return query.all()
+    
+    def count(self) -> int:
+        return self.session.query(Patient).count()
 
 # Add more methods as needed for complex queries, filtering, etc.
