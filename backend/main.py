@@ -3,38 +3,11 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from typing import Dict, List, Optional
 from pydantic import BaseModel, Field
-from datetime import datetime,date
+from datetime import datetime
 import os
 import shutil
 import uvicorn
 from subprocess import run, PIPE
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker, Session
-
-
-from repo.sql_models import Base, Patient, Visit, TestResult
-from repo.patient_repository import PatientRepository
-from repo.visit_repository import VisitRepository
-from repo.excel_to_repository import ExcelToRepository
-
-
-from schema.patient_schema import (
-    PatientCreate,
-    PatientUpdate,
-    PatientResponse,
-    PatientsListResponse,
-)
-
-from schema.visit_schema import (
-    VisitCreate,
-    VisitUpdate,
-    VisitResponse,
-    VisitsListResponse,
-)
-
-from repo.test_repository import TestResultRepository
-
-from test_history_manager import TestHistoryManager
 import uuid
 import json
 import base64
@@ -82,21 +55,6 @@ from patient_manager import (
     TestHistoryManager
 )
 
-# SQLAlchemy session setup
-
-engine = create_engine("sqlite:///./test.db", echo=True, future=True)
-SessionLocal = sessionmaker(bind=engine)
-Base.metadata.create_all(engine)
-
-def get_db():
-    db = SessionLocal()
-    try: 
-        yield db
-    finally:
-        db.close()
-
-
-#FastAPI app setup
 app = FastAPI(title="Patient Management API")
 app.include_router(dtw_router)
 
@@ -426,11 +384,11 @@ async def health_check():
 @app.post("/patients/", response_model=Dict)
 async def create_patient(patient: PatientCreate):
     try:
-        height = float(payload.height) if payload.height is not None else 0.0
+        height = float(patient.height) if patient.height is not None else 0.0
     except ValueError:
         height = 0.0
     try:
-        weight = float(payload.weight) if payload.weight is not None else 0.0
+        weight = float(patient.weight) if patient.weight is not None else 0.0
     except ValueError:
         weight = 0.0
 
@@ -464,7 +422,8 @@ async def get_patient(patient_id: str):
 
     if not result.get("success", False):
         raise HTTPException(status_code=404, detail="Patient not found")
-    return patient
+
+    return result
 
 @app.put("/patients/{patient_id}", response_model=Dict)
 async def update_patient(patient_id: str, patient_update: PatientUpdate):
@@ -576,20 +535,10 @@ async def start_test(patient_id: str = Form(...), test_name: str = Form(...)):
 
 # ============ REST: Test History ============
 @app.get("/patients/{patient_id}/tests", response_model=Dict)
-async def get_patient_tests(patient_id: str, db: Session = Depends(get_db)):
-    repo = TestResultRepository(db)
-    tests = repo.get_by_patient(patient_id)
-
-    if tests is None:
-        raise HTTPException(status_code=404, detail="Patient not found or no tests available")
-
-    # Convert SQLAlchemy objects to dicts for response
-    tests_list = [t.__dict__ for t in tests]
-    for t in tests_list:
-        t.pop("_sa_instance_state", None)
-
-    return {"success": True, "tests": tests_list}
-
+async def get_patient_tests(patient_id: str):
+    thm = TestHistoryManager()
+    tests = thm.get_patient_tests(patient_id)
+    return {"success": True, "tests": tests}
 
 @app.post("/patients/{patient_id}/tests", response_model=Dict)
 async def add_patient_test(patient_id: str, test_data: dict = Body(...)):
