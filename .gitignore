@@ -32,6 +32,8 @@ venv/
 
 # Databases
 *.db
+*.mov
+*.mp4
 
 # =========================================================
 # Environment / Local Config
