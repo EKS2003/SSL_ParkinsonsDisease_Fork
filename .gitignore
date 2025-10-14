@@ -60,3 +60,15 @@ venv/
 .DS_Store
 Thumbs.db
 ehthumbs.db
+
+<<<<<<< Updated upstream
+*.mp4
+*.mov
+*.avi
+=======
+/backend/__pycache__
+>>>>>>> Stashed changes
+backend/__pycache__/patient_manager.cpython-310.pyc
+SSL_ParkinsonsDisease_Fork.code-workspace
+backend/__pycache__/patient_manager.cpython-310.pyc
+backend/__pycache__/patient_manager.cpython-310.pyc
