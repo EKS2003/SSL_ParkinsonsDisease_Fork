@@ -175,7 +175,7 @@ def lookup_session(session_id: str) -> Dict[str, str]:
             continue
         if (t / session_id).is_dir():
             return {"testName": t.name, "sessionId": session_id}
-    raise HTTPException(404, "Session not found")
+    raise HTTPException(404, {"error": str(DTW_BASE)})
 
 def _infer_points_and_kpp(D: int, model: str) -> Tuple[int, int]:
     """
