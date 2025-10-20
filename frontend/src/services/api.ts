@@ -1,5 +1,4 @@
-
-const API_BASE_URL = 'http://localhost:8000';
+const API_BASE_URL = "http://localhost:8000";
 
 // Types for backend API
 interface BackendPatient {
@@ -54,107 +53,103 @@ interface ApiResponse<T> {
 // Convert backend patient to frontend patient
 const convertBackendToFrontend = (backendPatient: BackendPatient) => {
   // Handle undefined or null name
-  const name = backendPatient.name || '';
-  const nameParts = name.split(' ');
-  const firstName = nameParts[0] || '';
-  const lastName = nameParts.slice(1).join(' ') || '';
-  
+  const name = backendPatient.name || "";
+  const nameParts = name.split(" ");
+  const firstName = nameParts[0] || "";
+  const lastName = nameParts.slice(1).join(" ") || "";
+
   // Debug logging (commented out)
   // console.log('Converting backend patient:', backendPatient.patient_id);
   // console.log('Doctor notes history:', backendPatient.doctors_notes_history);
   // console.log('Legacy doctor notes:', backendPatient.doctors_notes);
-  
+
   return {
-    id: backendPatient.patient_id || '',
+    id: backendPatient.patient_id || "",
     firstName,
     lastName,
-    recordNumber: backendPatient.patient_id || '', // Using patient_id as record number
-    birthDate: backendPatient.birthDate || '',
+    recordNumber: backendPatient.patient_id || "", // Using patient_id as record number
+    birthDate: backendPatient.birthDate || "",
     height: `${backendPatient.height || 0} cm`,
     weight: `${backendPatient.weight || 0} kg`,
     labResults: JSON.stringify(backendPatient.lab_results || {}),
-    doctorNotes: backendPatient.doctors_notes || '',
-    labResultsHistory: (backendPatient.lab_results_history || []).map(entry => ({
-      id: entry.id,
-      date: new Date(entry.date),
-      results: entry.results,
-      addedBy: entry.added_by
-    })),
-    doctorNotesHistory: (backendPatient.doctors_notes_history || []).map(entry => ({
-      id: entry.id,
-      date: new Date(entry.date),
-      note: entry.note,
-      addedBy: entry.added_by
-    })),
-    severity: mapSeverity(backendPatient.severity || 'low'),
+    doctorNotes: backendPatient.doctors_notes || "",
+    labResultsHistory: (backendPatient.lab_results_history || []).map(
+      (entry) => ({
+        id: entry.id,
+        date: new Date(entry.date),
+        results: entry.results,
+        addedBy: entry.added_by,
+      })
+    ),
+    doctorNotesHistory: (backendPatient.doctors_notes_history || []).map(
+      (entry) => ({
+        id: entry.id,
+        date: new Date(entry.date),
+        note: entry.note,
+        addedBy: entry.added_by,
+      })
+    ),
+    severity: mapSeverity(backendPatient.severity || "low"),
     createdAt: new Date(), // Backend doesn't provide this, using current date
     updatedAt: new Date(), // Backend doesn't provide this, using current date
   };
 };
 
 // Convert frontend patient to backend format
-const convertFrontendToBackend = (frontendPatient: any): BackendPatientCreate => {
-  const fullName = `${frontendPatient.firstName || ''} ${frontendPatient.lastName || ''}`.trim();
-  
-  const heightStr = (frontendPatient.height || '').replace(/[^\d.]/g, '');
-  const weightStr = (frontendPatient.weight || '').replace(/[^\d.]/g, '');
-  
+const convertFrontendToBackend = (
+  frontendPatient: any
+): BackendPatientCreate => {
+  const fullName = `${frontendPatient.firstName || ""} ${
+    frontendPatient.lastName || ""
+  }`.trim();
+
+  const heightStr = (frontendPatient.height || "").replace(/[^\d.]/g, "");
+  const weightStr = (frontendPatient.weight || "").replace(/[^\d.]/g, "");
+
   return {
     name: fullName,
     birthDate: frontendPatient.birthDate,
-    height: heightStr || '0', // Keep as string for create endpoint
-    weight: weightStr || '0', // Keep as string for create endpoint
-    lab_results: frontendPatient.labResults ? JSON.parse(frontendPatient.labResults) : {},
-    doctors_notes: frontendPatient.doctorNotes || '',
-    severity: mapSeverityToBackend(frontendPatient.severity),
+    height: heightStr || "0", // Keep as string for create endpoint
+    weight: weightStr || "0", // Keep as string for create endpoint
+    lab_results: frontendPatient.labResults
+      ? JSON.parse(frontendPatient.labResults)
+      : {},
+    doctors_notes: frontendPatient.doctorNotes || "",
+    severity: frontendPatient.severity,
   };
 };
 
 // Map severity from backend to frontend
-export const mapSeverity = (backendSeverity: string): 'Stage 1' | 'Stage 2' | 'Stage 3' | 'Stage 4' | 'Stage 5' => {
+export const mapSeverity = (
+  backendSeverity: string
+): "Stage 1" | "Stage 2" | "Stage 3" | "Stage 4" | "Stage 5" => {
   switch (backendSeverity.toLowerCase()) {
-    case 'mild':
-      return 'Stage 1';
-    case 'medium':
-      return 'Stage 2';
-    case 'severe':
-      return 'Stage 4';
-    case 'low':
-      return 'Stage 1';
-    case 'high':
-      return 'Stage 5';
-    case 'stage 1':
-      return 'Stage 1';
-    case 'stage 2':
-      return 'Stage 2';
-    case 'stage 3':
-      return 'Stage 3';
-    case 'stage 4':
-      return 'Stage 4';
-    case 'stage 5':
-      return 'Stage 5';
+    case "mild":
+      return "Stage 1";
+    case "medium":
+      return "Stage 2";
+    case "severe":
+      return "Stage 4";
+    case "low":
+      return "Stage 1";
+    case "high":
+      return "Stage 5";
+    case "stage 1":
+      return "Stage 1";
+    case "stage 2":
+      return "Stage 2";
+    case "stage 3":
+      return "Stage 3";
+    case "stage 4":
+      return "Stage 4";
+    case "stage 5":
+      return "Stage 5";
     default:
-      return 'Stage 1';
+      return "Stage 1";
   }
 };
 
 // Map severity from frontend to backend
-const mapSeverityToBackend = (frontendSeverity: string): string => {
-  switch (frontendSeverity) {
-    case 'Stage 1':
-      return 'mild';
-    case 'Stage 2':
-      return 'medium';
-    case 'Stage 3':
-      return 'medium';
-    case 'Stage 4':
-      return 'severe';
-    case 'Stage 5':
-      return 'severe';
-    default:
-      return 'mild';
-  }
-};
 
 // API service class
 class ApiService {
@@ -170,10 +165,10 @@ class ApiService {
   ): Promise<ApiResponse<T>> {
     try {
       const url = `${this.baseUrl}${endpoint}`;
-      
+
       const response = await fetch(url, {
         headers: {
-          'Content-Type': 'application/json',
+          "Content-Type": "application/json",
           ...options.headers,
         },
         ...options,
@@ -181,21 +176,23 @@ class ApiService {
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
-        console.error('API Error Response:', errorData);
-        console.error('Error Response Type:', typeof errorData);
-        console.error('Error Detail Type:', typeof errorData.detail);
-        console.error('Full Error Object:', JSON.stringify(errorData, null, 2));
-        
+        console.error("API Error Response:", errorData);
+        console.error("Error Response Type:", typeof errorData);
+        console.error("Error Detail Type:", typeof errorData.detail);
+        console.error("Full Error Object:", JSON.stringify(errorData, null, 2));
+
         let errorMessage = `HTTP error! status: ${response.status}`;
-        
+
         if (errorData.detail) {
           if (Array.isArray(errorData.detail)) {
             // Handle validation error array
-            errorMessage = errorData.detail.map((err: any) => {
-              const field = err.loc?.join('.') || 'field';
-              return `${field}: ${err.msg}`;
-            }).join(', ');
-          } else if (typeof errorData.detail === 'object') {
+            errorMessage = errorData.detail
+              .map((err: any) => {
+                const field = err.loc?.join(".") || "field";
+                return `${field}: ${err.msg}`;
+              })
+              .join(", ");
+          } else if (typeof errorData.detail === "object") {
             // Handle nested error object
             errorMessage = JSON.stringify(errorData.detail);
           } else {
@@ -204,29 +201,36 @@ class ApiService {
         } else if (errorData.message) {
           errorMessage = errorData.message;
         }
-        
+
         throw new Error(errorMessage);
       }
 
       const data = await response.json();
       return { success: true, data };
     } catch (error) {
-      console.error('API request failed:', error);
+      console.error("API request failed:", error);
       return {
         success: false,
-        error: error instanceof Error ? error.message : 'Unknown error occurred',
+        error:
+          error instanceof Error ? error.message : "Unknown error occurred",
       };
     }
   }
 
   // Get all patients
-  async getPatients(skip: number = 0, limit: number = 100): Promise<ApiResponse<any[]>> {
-    const response = await this.request<{ patients: BackendPatient[]; total: number }>(
-      `/patients/?skip=${skip}&limit=${limit}`
-    );
+  async getPatients(
+    skip: number = 0,
+    limit: number = 100
+  ): Promise<ApiResponse<any[]>> {
+    const response = await this.request<{
+      patients: BackendPatient[];
+      total: number;
+    }>(`/patients/?skip=${skip}&limit=${limit}`);
 
     if (response.success && response.data) {
-      const convertedPatients = response.data.patients.map(convertBackendToFrontend);
+      const convertedPatients = response.data.patients.map(
+        convertBackendToFrontend
+      );
       return { success: true, data: convertedPatients };
     }
 
@@ -235,11 +239,14 @@ class ApiService {
 
   // Get single patient
   async getPatient(patientId: string): Promise<ApiResponse<any>> {
-    const response = await this.request<{ patient: BackendPatient } | BackendPatient>(`/patients/${patientId}`);
+    const response = await this.request<
+      { patient: BackendPatient } | BackendPatient
+    >(`/patients/${patientId}`);
 
     if (response.success && response.data) {
       // Handle the nested patient structure from the backend
-      const patientData = 'patient' in response.data ? response.data.patient : response.data;
+      const patientData =
+        "patient" in response.data ? response.data.patient : response.data;
       const convertedPatient = convertBackendToFrontend(patientData);
       return { success: true, data: convertedPatient };
     }
@@ -250,9 +257,9 @@ class ApiService {
   // Create new patient
   async createPatient(patientData: any): Promise<ApiResponse<any>> {
     const backendData = convertFrontendToBackend(patientData);
-    
-    const response = await this.request<BackendPatient>('/patients/', {
-      method: 'POST',
+
+    const response = await this.request<BackendPatient>("/patients/", {
+      method: "POST",
       body: JSON.stringify(backendData),
     });
 
@@ -265,53 +272,67 @@ class ApiService {
   }
 
   // Update patient
-  async updatePatient(patientId: string, updateData: any): Promise<ApiResponse<any>> {
+  async updatePatient(
+    patientId: string,
+    updateData: any
+  ): Promise<ApiResponse<any>> {
     const backendData: BackendPatientUpdate = {};
-    
-    console.log('Update patient input data:', updateData);
-    
+
+    console.log("Update patient input data:", updateData);
+
     if (updateData.firstName || updateData.lastName) {
-      const fullName = `${updateData.firstName || ''} ${updateData.lastName || ''}`.trim();
+      const fullName = `${updateData.firstName || ""} ${
+        updateData.lastName || ""
+      }`.trim();
       backendData.name = fullName;
     }
-    
+
     if (updateData.age !== undefined) backendData.birthDate = updateData.age;
     if (updateData.height) {
-      const heightStr = updateData.height.replace(/[^\d.]/g, '');
-      backendData.height = heightStr || '0';
+      const heightStr = updateData.height.replace(/[^\d.]/g, "");
+      backendData.height = heightStr || "0";
     }
     if (updateData.weight) {
-      const weightStr = updateData.weight.replace(/[^\d.]/g, '');
-      backendData.weight = weightStr || '0';
+      const weightStr = updateData.weight.replace(/[^\d.]/g, "");
+      backendData.weight = weightStr || "0";
     }
     if (updateData.labResults) {
       try {
         backendData.lab_results = JSON.parse(updateData.labResults);
       } catch (error) {
-        console.error('Error parsing labResults:', error);
+        console.error("Error parsing labResults:", error);
         backendData.lab_results = { notes: updateData.labResults };
       }
     }
-    if (updateData.doctorNotes !== undefined) backendData.doctors_notes = updateData.doctorNotes;
+    if (updateData.doctorNotes !== undefined)
+      backendData.doctors_notes = updateData.doctorNotes;
     if (updateData.severity) {
-      const mappedSeverity = mapSeverityToBackend(updateData.severity);
-      console.log('Severity mapping:', updateData.severity, '->', mappedSeverity);
+      const mappedSeverity = updateData.severity;
+      console.log(
+        "Severity mapping:",
+        updateData.severity,
+        "->",
+        mappedSeverity
+      );
       backendData.severity = mappedSeverity;
     }
 
-            console.log('Backend update data:', backendData);
-        console.log('Data types:', {
-          name: typeof backendData.name,
-          age: typeof backendData.birthDate,
-          height: typeof backendData.height,
-          weight: typeof backendData.weight,
-          severity: typeof backendData.severity
-        });
-
-    const response = await this.request<BackendPatient>(`/patients/${patientId}`, {
-      method: 'PUT',
-      body: JSON.stringify(backendData),
+    console.log("Backend update data:", backendData);
+    console.log("Data types:", {
+      name: typeof backendData.name,
+      age: typeof backendData.birthDate,
+      height: typeof backendData.height,
+      weight: typeof backendData.weight,
+      severity: typeof backendData.severity,
     });
+
+    const response = await this.request<BackendPatient>(
+      `/patients/${patientId}`,
+      {
+        method: "PUT",
+        body: JSON.stringify(backendData),
+      }
+    );
 
     if (response.success && response.data) {
       const convertedPatient = convertBackendToFrontend(response.data);
@@ -324,18 +345,21 @@ class ApiService {
   // Delete patient
   async deletePatient(patientId: string): Promise<ApiResponse<boolean>> {
     return await this.request<boolean>(`/patients/${patientId}`, {
-      method: 'DELETE',
+      method: "DELETE",
     });
   }
 
   // Search patients
   async searchPatients(query: string): Promise<ApiResponse<any[]>> {
-    const response = await this.request<{ patients: BackendPatient[]; count: number }>(
-      `/patients/search/${encodeURIComponent(query)}`
-    );
+    const response = await this.request<{
+      patients: BackendPatient[];
+      count: number;
+    }>(`/patients/search/${encodeURIComponent(query)}`);
 
     if (response.success && response.data) {
-      const convertedPatients = response.data.patients.map(convertBackendToFrontend);
+      const convertedPatients = response.data.patients.map(
+        convertBackendToFrontend
+      );
       return { success: true, data: convertedPatients };
     }
 
@@ -349,21 +373,25 @@ class ApiService {
     severity?: string;
   }): Promise<ApiResponse<any[]>> {
     const backendCriteria: any = {};
-    
-    if (criteria.minAge !== undefined) backendCriteria.min_age = criteria.minAge;
-    if (criteria.maxAge !== undefined) backendCriteria.max_age = criteria.maxAge;
-    if (criteria.severity) backendCriteria.severity = mapSeverityToBackend(criteria.severity);
 
-    const response = await this.request<{ patients: BackendPatient[]; count: number }>(
-      '/patients/filter/',
-      {
-        method: 'POST',
-        body: JSON.stringify(backendCriteria),
-      }
-    );
+    if (criteria.minAge !== undefined)
+      backendCriteria.min_age = criteria.minAge;
+    if (criteria.maxAge !== undefined)
+      backendCriteria.max_age = criteria.maxAge;
+    if (criteria.severity) backendCriteria.severity = criteria.severity;
+
+    const response = await this.request<{
+      patients: BackendPatient[];
+      count: number;
+    }>("/patients/filter/", {
+      method: "POST",
+      body: JSON.stringify(backendCriteria),
+    });
 
     if (response.success && response.data) {
-      const convertedPatients = response.data.patients.map(convertBackendToFrontend);
+      const convertedPatients = response.data.patients.map(
+        convertBackendToFrontend
+      );
       return { success: true, data: convertedPatients };
     }
 
@@ -372,7 +400,9 @@ class ApiService {
 
   // Get test history for a patient
   async getPatientTests(patientId: string): Promise<ApiResponse<any[]>> {
-    const response = await this.request<{ tests: any[] }>(`/patients/${patientId}/tests`);
+    const response = await this.request<{ tests: any[] }>(
+      `/patients/${patientId}/tests`
+    );
     if (response.success && response.data) {
       // Optionally, map/convert test data here
       return { success: true, data: response.data.tests };
@@ -381,16 +411,22 @@ class ApiService {
   }
 
   // Add a test result for a patient
-  async addPatientTest(patientId: string, testData: any): Promise<ApiResponse<boolean>> {
-    const response = await this.request<boolean>(`/patients/${patientId}/tests`, {
-      method: 'POST',
-      body: JSON.stringify(testData),
-      headers: { 'Content-Type': 'application/json' },
-    });
+  async addPatientTest(
+    patientId: string,
+    testData: any
+  ): Promise<ApiResponse<boolean>> {
+    const response = await this.request<boolean>(
+      `/patients/${patientId}/tests`,
+      {
+        method: "POST",
+        body: JSON.stringify(testData),
+        headers: { "Content-Type": "application/json" },
+      }
+    );
     return response;
   }
 }
 
 // Export singleton instance
 export const apiService = new ApiService();
-export default apiService; 
+export default apiService;

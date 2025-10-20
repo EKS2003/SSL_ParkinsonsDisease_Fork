@@ -1,15 +1,21 @@
-import { useState, useEffect } from 'react';
-import { useNavigate, useParams, Link } from 'react-router-dom';
-import { ArrowLeft, Save, User, Loader2 } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { useToast } from '@/hooks/use-toast';
-import { Patient } from '@/types/patient';
-import apiService from '@/services/api';
+import { useState, useEffect } from "react";
+import { useNavigate, useParams, Link } from "react-router-dom";
+import { ArrowLeft, Save, User, Loader2 } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { useToast } from "@/hooks/use-toast";
+import { Patient } from "@/types/patient";
+import apiService from "@/services/api";
 
 const PatientForm = () => {
   const navigate = useNavigate();
@@ -18,20 +24,20 @@ const PatientForm = () => {
   const isEditing = !!id;
 
   const [formData, setFormData] = useState({
-    firstName: '',
-    lastName: '',
-    recordNumber: '',
-    birthDate: '',
-    height: '',
-    weight: '',
-    labResults: '',
-    doctorNotes: '',
-    severity: '' as Patient['severity'],
+    firstName: "",
+    lastName: "",
+    recordNumber: "",
+    birthDate: "",
+    height: "",
+    weight: "",
+    labResults: "",
+    doctorNotes: "",
+    severity: "" as Patient["severity"],
   });
   const [loading, setLoading] = useState(false);
 
   const handleInputChange = (field: string, value: string) => {
-    setFormData(prev => ({ ...prev, [field]: value }));
+    setFormData((prev) => ({ ...prev, [field]: value }));
   };
 
   // Load patient data if editing
@@ -50,7 +56,7 @@ const PatientForm = () => {
           firstName: patient.firstName,
           lastName: patient.lastName,
           recordNumber: patient.recordNumber,
-          birthDate: patient.age.toString(),
+          birthDate: patient.birthDate,
           height: patient.height,
           weight: patient.weight,
           labResults: patient.labResults,
@@ -71,7 +77,13 @@ const PatientForm = () => {
     e.preventDefault();
     setLoading(true);
 
-    if (!formData.firstName || !formData.lastName || !formData.recordNumber || !formData.birthDate || !formData.severity) {
+    if (
+      !formData.firstName ||
+      !formData.lastName ||
+      !formData.recordNumber ||
+      !formData.birthDate ||
+      !formData.severity
+    ) {
       toast({
         title: "Validation Error",
         description: "Please fill in all required fields.",
@@ -86,18 +98,18 @@ const PatientForm = () => {
         firstName: formData.firstName,
         lastName: formData.lastName,
         recordNumber: formData.recordNumber,
-        birthDate: (formData.birthDate),
-        height: formData.height || '170 cm',
-        weight: formData.weight || '70 kg',
-        labResults: formData.labResults || '{}',
-        doctorNotes: formData.doctorNotes || '',
+        birthDate: formData.birthDate,
+        height: formData.height || "170 cm",
+        weight: formData.weight || "70 kg",
+        labResults: formData.labResults || "{}",
+        doctorNotes: formData.doctorNotes || "",
         severity: formData.severity,
         createdAt: new Date(),
         updatedAt: new Date(),
       };
 
-      console.log('Saving patient with data:', patientData);
-      console.log('Is editing:', isEditing, 'ID:', id);
+      console.log("Saving patient with data:", patientData);
+      console.log("Is editing:", isEditing, "ID:", id);
 
       let response;
       if (isEditing && id) {
@@ -105,15 +117,17 @@ const PatientForm = () => {
       } else {
         response = await apiService.createPatient(patientData);
       }
-      
-      console.log('API response:', response);
+
+      console.log("API response:", response);
 
       if (response.success) {
         toast({
           title: isEditing ? "Patient Updated" : "Patient Created",
-          description: `${formData.firstName} ${formData.lastName} has been ${isEditing ? 'updated' : 'added'} successfully.`,
+          description: `${formData.firstName} ${formData.lastName} has been ${
+            isEditing ? "updated" : "added"
+          } successfully.`,
         });
-        navigate(isEditing ? `/patient/${id}` : '/');
+        navigate(isEditing ? `/patient/${id}` : "/");
       } else {
         toast({
           title: "Error",
@@ -133,8 +147,6 @@ const PatientForm = () => {
     }
   };
 
-
-
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
@@ -142,18 +154,20 @@ const PatientForm = () => {
         <div className="container mx-auto px-6 py-6">
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-4">
-              <Link to={isEditing ? `/patient/${id}` : '/'}>
+              <Link to={isEditing ? `/patient/${id}` : "/"}>
                 <Button variant="outline" size="sm">
                   <ArrowLeft className="mr-2 h-4 w-4" />
-                  {isEditing ? 'Back to Patient' : 'Back to Patients'}
+                  {isEditing ? "Back to Patient" : "Back to Patients"}
                 </Button>
               </Link>
               <div>
                 <h1 className="text-3xl font-bold text-foreground">
-                  {isEditing ? 'Edit Patient' : 'Add New Patient'}
+                  {isEditing ? "Edit Patient" : "Add New Patient"}
                 </h1>
                 <p className="text-muted-foreground mt-1">
-                  {isEditing ? 'Update patient information' : 'Enter patient details to create a new record'}
+                  {isEditing
+                    ? "Update patient information"
+                    : "Enter patient details to create a new record"}
                 </p>
               </div>
             </div>
@@ -181,7 +195,9 @@ const PatientForm = () => {
                       id="firstName"
                       placeholder="Enter first name"
                       value={formData.firstName}
-                      onChange={(e) => handleInputChange('firstName', e.target.value)}
+                      onChange={(e) =>
+                        handleInputChange("firstName", e.target.value)
+                      }
                       required
                     />
                   </div>
@@ -192,7 +208,9 @@ const PatientForm = () => {
                       id="lastName"
                       placeholder="Enter last name"
                       value={formData.lastName}
-                      onChange={(e) => handleInputChange('lastName', e.target.value)}
+                      onChange={(e) =>
+                        handleInputChange("lastName", e.target.value)
+                      }
                       required
                     />
                   </div>
@@ -203,20 +221,23 @@ const PatientForm = () => {
                       id="recordNumber"
                       placeholder="e.g., P001"
                       value={formData.recordNumber}
-                      onChange={(e) => handleInputChange('recordNumber', e.target.value)}
+                      onChange={(e) =>
+                        handleInputChange("recordNumber", e.target.value)
+                      }
                       required
                     />
                   </div>
 
                   <div className="space-y-2">
-                    <Label htmlFor="age">Age *</Label>
+                    <Label htmlFor="birthDate">BirthDate *</Label>
                     <Input
-                      id="age"
-                      type="number"
-                      placeholder="Enter age"
+                      id="birthDate"
+                      type="date"
+                      placeholder="Enter Birth Date"
                       value={formData.birthDate}
-                      onChange={(e) => handleInputChange('age', e.target.value)}
-                      required
+                      onChange={(e) =>
+                        handleInputChange("birthDate", e.target.value)
+                      } // <-- keep full "YYYY-MM-DD"
                     />
                   </div>
 
@@ -226,7 +247,9 @@ const PatientForm = () => {
                       id="height"
                       placeholder="e.g., 5'8&quot;"
                       value={formData.height}
-                      onChange={(e) => handleInputChange('height', e.target.value)}
+                      onChange={(e) =>
+                        handleInputChange("height", e.target.value)
+                      }
                     />
                   </div>
 
@@ -236,7 +259,9 @@ const PatientForm = () => {
                       id="weight"
                       placeholder="e.g., 170 lbs"
                       value={formData.weight}
-                      onChange={(e) => handleInputChange('weight', e.target.value)}
+                      onChange={(e) =>
+                        handleInputChange("weight", e.target.value)
+                      }
                     />
                   </div>
                 </div>
@@ -244,7 +269,12 @@ const PatientForm = () => {
                 {/* Severity */}
                 <div className="space-y-2">
                   <Label htmlFor="severity">Parkinson's Severity *</Label>
-                  <Select value={formData.severity} onValueChange={(value) => handleInputChange('severity', value)}>
+                  <Select
+                    value={formData.severity}
+                    onValueChange={(value) =>
+                      handleInputChange("severity", value)
+                    }
+                  >
                     <SelectTrigger>
                       <SelectValue placeholder="Select severity level" />
                     </SelectTrigger>
@@ -265,7 +295,9 @@ const PatientForm = () => {
                     id="labResults"
                     placeholder="Enter lab results and findings..."
                     value={formData.labResults}
-                    onChange={(e) => handleInputChange('labResults', e.target.value)}
+                    onChange={(e) =>
+                      handleInputChange("labResults", e.target.value)
+                    }
                     rows={3}
                   />
                 </div>
@@ -277,25 +309,35 @@ const PatientForm = () => {
                     id="doctorNotes"
                     placeholder="Enter clinical observations, treatment notes, etc..."
                     value={formData.doctorNotes}
-                    onChange={(e) => handleInputChange('doctorNotes', e.target.value)}
+                    onChange={(e) =>
+                      handleInputChange("doctorNotes", e.target.value)
+                    }
                     rows={4}
                   />
                 </div>
 
                 {/* Submit Button */}
                 <div className="flex justify-end space-x-4 pt-6">
-                  <Link to={isEditing ? `/patient/${id}` : '/'}>
+                  <Link to={isEditing ? `/patient/${id}` : "/"}>
                     <Button variant="outline" disabled={loading}>
                       Cancel
                     </Button>
                   </Link>
-                  <Button type="submit" className="bg-primary hover:bg-primary-hover text-primary-foreground" disabled={loading}>
+                  <Button
+                    type="submit"
+                    className="bg-primary hover:bg-primary-hover text-primary-foreground"
+                    disabled={loading}
+                  >
                     {loading ? (
                       <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                     ) : (
                       <Save className="mr-2 h-4 w-4" />
                     )}
-                    {loading ? 'Saving...' : (isEditing ? 'Update Patient' : 'Create Patient')}
+                    {loading
+                      ? "Saving..."
+                      : isEditing
+                      ? "Update Patient"
+                      : "Create Patient"}
                   </Button>
                 </div>
               </form>

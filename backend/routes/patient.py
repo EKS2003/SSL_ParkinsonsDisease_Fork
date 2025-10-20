@@ -1,48 +1,98 @@
 from fastapi import APIRouter, Depends, Query, HTTPException
-from pydantic import BaseModel, Field
-from typing import List, Optional, Dict, Any
+
+from datetime import date
+from typing import List, Optional, Dict, Any, Union
+from pydantic import BaseModel, Field, field_validator
+import json, re
+
 
 from patient_manager import (
-    Patient, PatientManager,
     async_create_patient, async_get_patient_info,
     async_update_patient_info, async_delete_patient_record,
     async_get_all_patients_info, async_search_patients,
     async_filter_patients,
-    TestHistoryManager
 )
+
+_num = re.compile(r"(\d+\.?\d*)")
+# Accept low/medium/high OR Stage 1..5
 
 class PatientCreate(BaseModel):
     name: str
-    age: int = Field(..., ge=0, le=120)
-    height: str = Field(..., min_length=1)
-    weight: str = Field(..., min_length=1)
-    lab_results: Optional[Dict] = Field(default_factory=dict)
+    birthDate: date                                      # <-- use birthDate not age
+    height: Optional[Union[float, str]] = None
+    weight: Optional[Union[float, str]] = None
+    lab_results: Optional[Union[Dict[str, Any], str]] = Field(default_factory=dict)
     doctors_notes: Optional[str] = ""
-    severity: str = Field("low", pattern="^(low|medium|high)$")
+    severity: str
+
+    @field_validator("height", "weight", mode="before")
+    @classmethod
+    def _to_float(cls, v):
+        if v is None:
+            return None
+        if isinstance(v, (int, float)):
+            return float(v)
+        m = _num.search(str(v))
+        return float(m.group(1)) if m else None
+
+    @field_validator("lab_results", mode="before")
+    @classmethod
+    def _to_dict(cls, v):
+        if v in (None, "", {}):
+            return {}
+        if isinstance(v, dict):
+            return v
+        try:
+            parsed = json.loads(str(v))
+            return parsed if isinstance(parsed, dict) else {"value": parsed}
+        except Exception:
+            return {"value": v}
 
 class PatientUpdate(BaseModel):
     name: Optional[str] = None
-    age: Optional[int] = Field(None, ge=0, le=120)
-    birthDate: Optional[str] = None
-    height: Optional[str] = None
-    weight: Optional[str] = None
-    lab_results: Optional[Dict] = None
-    lab_results_history: Optional[List[Dict]] = None
+    birthDate: Optional[date] = None                     # <-- keep birthDate for updates too
+    height: Optional[Union[float, str]] = None
+    weight: Optional[Union[float, str]] = None
+    lab_results: Optional[Union[Dict[str, Any], str]] = None
+    lab_results_history: Optional[List[Dict[str, Any]]] = None
     doctors_notes: Optional[str] = None
-    doctors_notes_history: Optional[List[Dict]] = None
-    severity: Optional[str] = Field(None, pattern="^(low|medium|high)$")
+    doctors_notes_history: Optional[List[Dict[str, Any]]] = None
+    severity: Optional[str] 
+
+    @field_validator("height", "weight", mode="before")
+    @classmethod
+    def _to_float(cls, v):
+        if v is None:
+            return None
+        if isinstance(v, (int, float)):
+            return float(v)
+        m = _num.search(str(v))
+        return float(m.group(1)) if m else None
+
+    @field_validator("lab_results", mode="before")
+    @classmethod
+    def _to_dict(cls, v):
+        if v in (None, ""):
+            return None
+        if isinstance(v, dict):
+            return v
+        try:
+            parsed = json.loads(str(v))
+            return parsed if isinstance(parsed, dict) else {"value": parsed}
+        except Exception:
+            return {"value": v}
 
 class PatientResponse(BaseModel):
     patient_id: str
     name: str
-    birthDate: str
-    height: str  # Changed to str to handle existing data
-    weight: str  # Changed to str to handle existing data
-    lab_results: Dict
+    birthDate: str                                       # ISO string in your current API
+    height: str
+    weight: str
+    lab_results: Dict[str, Any]
     doctors_notes: str
     severity: str
-    lab_results_history: Optional[List[Dict]] = []
-    doctors_notes_history: Optional[List[Dict]] = []
+    lab_results_history: Optional[List[Dict[str, Any]]] = []
+    doctors_notes_history: Optional[List[Dict[str, Any]]] = []
 
 class PatientsListResponse(BaseModel):
     success: bool
@@ -57,38 +107,30 @@ class PatientSearchResponse(BaseModel):
     count: int
 
 class FilterCriteria(BaseModel):
+    # Keep age filters if you want; you’ll compute DOB cutoffs server-side
     min_age: Optional[int] = None
     max_age: Optional[int] = None
-    severity: Optional[str] = None
+    severity: Optional[str] 
 
 router = APIRouter(prefix="/patients")
 
 
 @router.post("/", response_model=Dict)
 async def create_patient(patient: PatientCreate):
-    try:
-        height = float(patient.height) if patient.height is not None else 0.0
-    except ValueError:
-        height = 0.0
-    try:
-        weight = float(patient.weight) if patient.weight is not None else 0.0
-    except ValueError:
-        weight = 0.0
-
-    lab_results = patient.lab_results if patient.lab_results is not None else {}
-    doctors_notes = patient.doctors_notes if patient.doctors_notes is not None else ""
     result = await async_create_patient(
         name=patient.name,
         birthDate=patient.birthDate,
-        height=height,
-        weight=weight,
-        lab_results=lab_results,
-        doctors_notes=doctors_notes,
-        severity=patient.severity
+        height=patient.height,
+        weight=patient.weight,
+        lab_results=patient.lab_results or {},
+        doctors_notes=patient.doctors_notes or "",
+        severity=patient.severity,
     )
 
-    if not result.get("success", False):
-        raise HTTPException(status_code=400, detail=result.get("error", "Failed to create patient"))
+    if not result or not result.get("success"):
+        # Prefer detailed errors if present
+        detail = result.get("errors") if result and result.get("errors") else result.get("error", "Failed to create patient")
+        raise HTTPException(status_code=422 if isinstance(detail, dict) else 400, detail=detail)
 
     return result
 

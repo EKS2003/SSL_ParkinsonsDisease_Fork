@@ -44,11 +44,8 @@ class VisitRepository:
         self.session.commit()
         return True
 
-    def list(self, skip: int = 0, limit: int = 100) -> List[Visit]:
-        return (
-            self.session
-            .query(Visit)
-            .offset(skip)
-            .limit(limit)
-            .all()
-        )
+    def list(self, patient_id: str | None = None, skip: int = 0, limit: int = 100):
+        q = self.session.query(Visit)
+        if patient_id:
+            q = q.filter(Visit.patient_id == patient_id)
+        return q.order_by(Visit.visit_date.asc()).offset(skip).limit(limit).all()

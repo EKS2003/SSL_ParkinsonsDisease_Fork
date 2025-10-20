@@ -29,11 +29,6 @@ os.makedirs(RECORDINGS_DIR, exist_ok=True)
 
 # ============ Patient Manager ============
 from patient_manager import (
-    Patient, PatientManager,
-    async_create_patient, async_get_patient_info,
-    async_update_patient_info, async_delete_patient_record,
-    async_get_all_patients_info, async_search_patients,
-    async_filter_patients,
     TestHistoryManager
 )
 
