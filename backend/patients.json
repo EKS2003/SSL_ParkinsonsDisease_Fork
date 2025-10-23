@@ -2,7 +2,7 @@
   "johnd1755555241": {
     "patient_id": "johnd1755555241",
     "name": "John Doe",
-    "age": 65,
+    "birthDate": "1965-05-19",
     "height": "170.0",
     "weight": "70.0",
     "lab_results": {},

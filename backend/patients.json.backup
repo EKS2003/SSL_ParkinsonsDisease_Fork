@@ -9,14 +9,74 @@
     "doctors_notes": "",
     "severity": "medium"
   },
-  "testp1759999216": {
-    "patient_id": "testp1759999216",
-    "name": "Test Patient",
-    "age": 35,
-    "height": "170.0",
+  "erice1753317634": {
+    "patient_id": "erice1753317634",
+    "name": "eric el loco",
+    "age": 42,
+    "height": "180.0",
     "weight": "70.0",
     "lab_results": {},
     "doctors_notes": "",
+    "severity": "mild",
+    "lab_results_history": [
+      {
+        "id": "lab_kenneth_1",
+        "date": "2025-09-28T12:00:00Z",
+        "results": "Genetic testing: LRRK2 variant detected, CBC: Normal, Dopamine markers: 110 ng/mL",
+        "added_by": "Dr. Patel"
+      },
+      {
+        "id": "lab_kenneth_2",
+        "date": "2025-07-05T09:15:00Z",
+        "results": "Initial genetic screening ordered, CBC: Normal, Young-onset panel: Pending",
+        "added_by": "Dr. Patel"
+      }
+    ],
+    "doctors_notes_history": [
+      {
+        "id": "note_kenneth_1",
+        "date": "2025-09-30T16:45:00Z",
+        "note": "Genetic testing confirmed LRRK2 variant. Discussed familial implications and genetic counseling referral. Early intervention with exercise program.",
+        "added_by": "Dr. Patel"
+      },
+      {
+        "id": "note_kenneth_2",
+        "date": "2025-07-08T11:20:00Z",
+        "note": "Young onset Parkinson's suspected. Family history positive. Genetic testing initiated.",
+        "added_by": "Dr. Patel"
+      }
+    ]
+  },
+  "deborahw7890123456": {
+    "patient_id": "deborahw7890123456",
+    "name": "Deborah White",
+    "birthDate": "1956-07-09",
+    "height": "166.0",
+    "weight": "67.0",
+    "lab_results": {},
+    "doctors_notes": "Tremor-dominant phenotype",
+    "severity": "medium",
+    "lab_results_history": [],
+    "doctors_notes_history": []
+  },
+  "paulh8901234567": {
+    "patient_id": "paulh8901234567",
+    "name": "Paul Hall",
+    "birthDate": "1952-04-21",
+    "height": "169.0",
+    "weight": "71.0",
+    "lab_results": {},
+    "doctors_notes": "Non-motor symptoms predominant",
+    "severity": "medium",
+    "lab_results_history": [],
+    "doctors_notes_history": []
+  },
+  "heleny9012345678": {
+    "patient_id": "heleny9012345678",
+    "name": "Helen Young",
+    "birthDate": "1960-02-28",
+    "height": "161.0",
+    "weight": "60.0",
     "severity": "Stage 1"
   },
   "johnd1759999266": {
@@ -38,5 +98,70 @@
     "lab_results": {},
     "doctors_notes": "",
     "severity": "Stage 2"
+    "severity": "medium",
+    "lab_results_history": [
+      {
+        "id": "lab_helen_1",
+        "date": "2025-09-12T14:45:00Z",
+        "results": "CBC: Normal, Dopamine markers: 135 ng/mL, Depression screening: PHQ-9 score improved to 8",
+        "added_by": "Dr. Williams"
+      }
+    ],
+    "doctors_notes_history": [
+      {
+        "id": "note_helen_1",
+        "date": "2025-09-15T10:00:00Z",
+        "note": "Depression management showing improvement with sertraline. Motor symptoms stable. Continue current regimen.",
+        "added_by": "Dr. Williams"
+      },
+      {
+        "id": "note_helen_2",
+        "date": "2025-08-01T13:30:00Z",
+        "note": "Started antidepressant therapy. Patient education on PD-related depression provided. Follow-up in 6 weeks.",
+        "added_by": "Dr. Williams"
+      },
+      {
+        "id": "note_helen_3",
+        "date": "2025-06-20T15:15:00Z",
+        "note": "Depression symptoms identified during routine visit. PHQ-9 score: 14. Referral to psychiatrist considered.",
+        "added_by": "Dr. Brown"
+      }
+    ]
+  },
+  "markk0123456789": {
+    "patient_id": "markk0123456789",
+    "name": "Mark King",
+    "birthDate": "1965-09-11",
+    "height": "181.0",
+    "weight": "84.0",
+    "lab_results": {},
+    "doctors_notes": "Participating in clinical trial",
+    "severity": "mild",
+    "lab_results_history": [],
+    "doctors_notes_history": []
+  },
+  "dorisg1234567890": {
+    "patient_id": "dorisg1234567890",
+    "name": "Doris Green",
+    "birthDate": "1948-12-03",
+    "height": "158.0",
+    "weight": "55.0",
+    "lab_results": {},
+    "doctors_notes": "Significant motor fluctuations",
+    "severity": "severe",
+    "lab_results_history": [],
+    "doctors_notes_history": []
+  },
+  "stevens2345678901": {
+    "patient_id": "stevens2345678901",
+    "name": "Steven Scott",
+    "birthDate": "1959-01-25",
+    "height": "177.0",
+    "weight": "79.0",
+    "lab_results": {},
+    "doctors_notes": "Stable on current medication regimen",
+    "severity": "mild",
+    "lab_results_history": [],
+    "doctors_notes_history": []
   }
 }

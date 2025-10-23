@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useState} from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { ArrowLeft, Plus, Calendar, FileText, Activity, Edit, Play } from 'lucide-react';
+import { ArrowLeft, Plus, Calendar, FileText, Activity, Edit, Play, Clock, User, Stethoscope } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
-import { Patient, Test } from '@/types/patient';
+import { Patient, Test, LabResultEntry, DoctorNoteEntry } from '@/types/patient';
 import { getSeverityColor, calculateAge } from '@/lib/utils';
 import { mapSeverity } from '@/services/api';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, } from '@/components/ui/dialog';
@@ -13,6 +13,7 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
+import { useToast } from '@/hooks/use-toast';
 
 // Mock data - replace with actual data fetching
 const mockPatient: Patient = {
@@ -67,6 +68,11 @@ const PatientDetails = () => {
   const [tests, setTests] = useState<Test[]>([]); // Placeholder – replace with real API if available
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [editData, setEditData] = useState<Partial<Patient>>({});
+  const [isLabResultModalOpen, setIsLabResultModalOpen] = useState(false);
+  const [isDoctorNoteModalOpen, setIsDoctorNoteModalOpen] = useState(false);
+  const [newLabResult, setNewLabResult] = useState('');
+  const [newDoctorNote, setNewDoctorNote] = useState('');
+  const { toast } = useToast();
 
   const openForEdit = useCallback(() => {
     if (!patient) return;
@@ -91,6 +97,112 @@ const PatientDetails = () => {
     setIsEditOpen(false);
   };
 
+  const handleAddLabResult = async () => {
+    if (!patient || !newLabResult.trim()) return;
+    
+    const newEntry: LabResultEntry = {
+      id: `lab_${Date.now()}`,
+      date: new Date(),
+      results: newLabResult,
+      addedBy: 'Current User' // In a real app, this would come from auth context
+    };
+
+    const updatedHistory = [...(patient.labResultsHistory || []), newEntry];
+    const updatedPatient = { ...patient, labResultsHistory: updatedHistory };
+    
+    // Update local state immediately for UI responsiveness
+    setPatient(updatedPatient);
+    setNewLabResult('');
+    setIsLabResultModalOpen(false);
+
+    // Persist to backend
+    try {
+      const response = await fetch(`http://localhost:8000/patients/${patient.id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          lab_results_history: updatedHistory.map(entry => ({
+            id: entry.id,
+            date: entry.date.toISOString(),
+            results: entry.results,
+            added_by: entry.addedBy
+          }))
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to save lab result');
+      }
+
+      toast({
+        title: "Lab Result Added",
+        description: "The lab result has been successfully recorded.",
+      });
+    } catch (error) {
+      console.error('Error saving lab result:', error);
+      toast({
+        title: "Error",
+        description: "Failed to save lab result to server.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleAddDoctorNote = async () => {
+    if (!patient || !newDoctorNote.trim()) return;
+    
+    const newEntry: DoctorNoteEntry = {
+      id: `note_${Date.now()}`,
+      date: new Date(),
+      note: newDoctorNote,
+      addedBy: 'Current User' // In a real app, this would come from auth context
+    };
+
+    const updatedHistory = [...(patient.doctorNotesHistory || []), newEntry];
+    const updatedPatient = { ...patient, doctorNotesHistory: updatedHistory };
+    
+    // Update local state immediately for UI responsiveness
+    setPatient(updatedPatient);
+    setNewDoctorNote('');
+    setIsDoctorNoteModalOpen(false);
+
+    // Persist to backend
+    try {
+      const response = await fetch(`http://localhost:8000/patients/${patient.id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          doctors_notes_history: updatedHistory.map(entry => ({
+            id: entry.id,
+            date: entry.date.toISOString(),
+            note: entry.note,
+            added_by: entry.addedBy
+          }))
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to save doctor note');
+      }
+
+      toast({
+        title: "Note Added",
+        description: "The doctor's note has been successfully recorded.",
+      });
+    } catch (error) {
+      console.error('Error saving doctor note:', error);
+      toast({
+        title: "Error",
+        description: "Failed to save doctor's note to server.",
+        variant: "destructive",
+      });
+    }
+  };
+
   useEffect(() => {
     const fetchPatient = async () => {
       try {
@@ -101,18 +213,36 @@ const PatientDetails = () => {
           throw new Error(data.detail || 'Failed to fetch patient');
         }
 
+        // Debug logging
+        console.log('API Response:', data);
+        console.log('Patient data:', data.patient);
+        console.log('Lab results history:', data.patient?.lab_results_history);
+        console.log('Doctor notes history:', data.patient?.doctors_notes_history);
+
         const [firstName, lastName] = data.patient.name.split(' ');
 
         setPatient({
           id: data.patient.patient_id,
           firstName,
           lastName,
-          recordNumber: '', // Add logic if your backend supports it
+          recordNumber: data.patient.patient_id, // Use patient_id as record number
           birthDate: data.patient.birthDate,
           height: `${data.patient.height}`,
           weight: `${data.patient.weight}`,
           labResults: data.patient.lab_results?.notes || '',
           doctorNotes: data.patient.doctors_notes || '',
+          labResultsHistory: (data.patient.lab_results_history || []).map((entry: any) => ({
+            id: entry.id,
+            date: new Date(entry.date),
+            results: entry.results,
+            addedBy: entry.added_by
+          })),
+          doctorNotesHistory: (data.patient.doctors_notes_history || []).map((entry: any) => ({
+            id: entry.id,
+            date: new Date(entry.date),
+            note: entry.note,
+            addedBy: entry.added_by
+          })),
           severity: mapSeverity(data.patient.severity),
           createdAt: new Date(), // Optional: replace with actual timestamps
           updatedAt: new Date(),
@@ -220,8 +350,16 @@ const PatientDetails = () => {
               <CardContent className="space-y-4">
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                   <div>
-                    <p className="text-sm font-medium text-muted-foreground">Age</p>
-                    <p className="text-lg font-semibold">  {patient.birthDate ? `${calculateAge(patient.birthDate)} years` : 'N/A'} </p> {/*Create a function to calculate age*/}
+                    <p className="text-sm font-medium text-muted-foreground">Date of Birth</p>
+                    <p className="text-lg font-semibold">
+                      {patient.birthDate || 'N/A'}
+                      {patient.birthDate && (
+                        <span className="text-sm text-muted-foreground ml-2">
+                          (Age: {calculateAge(patient.birthDate)} years)
+                        </span>
+                      )}
+                    </p>
+                    <p className="text-xs text-muted-foreground/70">YYYY-MM-DD format</p>
                   </div>
                   <div>
                     <p className="text-sm font-medium text-muted-foreground">Height</p>
@@ -240,14 +378,80 @@ const PatientDetails = () => {
                 <Separator />
 
                 <div>
-                  <p className="text-sm font-medium text-muted-foreground mb-2">Lab Results</p>
-                  <p className="text-sm">{patient.labResults}</p>
+                  <div className="flex items-center justify-between mb-4">
+                    <p className="text-sm font-medium text-muted-foreground">Lab Results History</p>
+                    <Button size="sm" variant="outline" onClick={() => setIsLabResultModalOpen(true)}>
+                      <Plus className="mr-2 h-4 w-4" />
+                      Add Lab Result
+                    </Button>
+                  </div>
+                  <div className="space-y-3">
+                    {patient.labResultsHistory && patient.labResultsHistory.length > 0 ? (
+                      patient.labResultsHistory
+                        .sort((a, b) => b.date.getTime() - a.date.getTime())
+                        .map((entry) => (
+                          <div key={entry.id} className="border rounded-lg p-4 bg-card">
+                            <div className="flex items-start justify-between mb-2">
+                              <div className="flex items-center text-sm text-muted-foreground">
+                                <Stethoscope className="mr-2 h-4 w-4" />
+                                <span>{entry.date.toLocaleDateString()}</span>
+                                {entry.addedBy && (
+                                  <>
+                                    <span className="mx-2">•</span>
+                                    <span>by {entry.addedBy}</span>
+                                  </>
+                                )}
+                              </div>
+                              <span className="text-xs text-muted-foreground">
+                                {entry.date.toLocaleTimeString()}
+                              </span>
+                            </div>
+                            <p className="text-sm">{entry.results}</p>
+                          </div>
+                        ))
+                    ) : (
+                      <p className="text-sm text-muted-foreground italic">No lab results recorded</p>
+                    )}
+                  </div>
                 </div>
 
+                <Separator />
+
                 <div>
-                  <p className="text-sm font-medium text-muted-foreground mb-2">Doctor's Notes</p>
-                  <div className="bg-muted p-4 rounded-md">
-                    <p className="text-sm">{patient.doctorNotes}</p>
+                  <div className="flex items-center justify-between mb-4">
+                    <p className="text-sm font-medium text-muted-foreground">Doctor's Notes History</p>
+                    <Button size="sm" variant="outline" onClick={() => setIsDoctorNoteModalOpen(true)}>
+                      <Plus className="mr-2 h-4 w-4" />
+                      Add Note
+                    </Button>
+                  </div>
+                  <div className="space-y-3">
+                    {patient.doctorNotesHistory && patient.doctorNotesHistory.length > 0 ? (
+                      patient.doctorNotesHistory
+                        .sort((a, b) => b.date.getTime() - a.date.getTime())
+                        .map((entry) => (
+                          <div key={entry.id} className="border rounded-lg p-4 bg-muted/50">
+                            <div className="flex items-start justify-between mb-2">
+                              <div className="flex items-center text-sm text-muted-foreground">
+                                <User className="mr-2 h-4 w-4" />
+                                <span>{entry.date.toLocaleDateString()}</span>
+                                {entry.addedBy && (
+                                  <>
+                                    <span className="mx-2">•</span>
+                                    <span>by {entry.addedBy}</span>
+                                  </>
+                                )}
+                              </div>
+                              <span className="text-xs text-muted-foreground">
+                                {entry.date.toLocaleTimeString()}
+                              </span>
+                            </div>
+                            <p className="text-sm">{entry.note}</p>
+                          </div>
+                        ))
+                    ) : (
+                      <p className="text-sm text-muted-foreground italic">No doctor's notes recorded</p>
+                    )}
                   </div>
                 </div>
               </CardContent>
@@ -407,6 +611,64 @@ const PatientDetails = () => {
               <Button type="submit">Save</Button>
             </div>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Lab Result Modal */}
+      <Dialog open={isLabResultModalOpen} onOpenChange={setIsLabResultModalOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Add Lab Result</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Label htmlFor="labResult">Lab Results</Label>
+              <Textarea
+                id="labResult"
+                placeholder="Enter lab results (e.g., CBC: Normal, Dopamine markers: 120 ng/mL...)"
+                value={newLabResult}
+                onChange={(e) => setNewLabResult(e.target.value)}
+                rows={4}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsLabResultModalOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleAddLabResult} disabled={!newLabResult.trim()}>
+              Add Result
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Doctor Note Modal */}
+      <Dialog open={isDoctorNoteModalOpen} onOpenChange={setIsDoctorNoteModalOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Add Doctor's Note</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Label htmlFor="doctorNote">Doctor's Note</Label>
+              <Textarea
+                id="doctorNote"
+                placeholder="Enter doctor's notes or observations..."
+                value={newDoctorNote}
+                onChange={(e) => setNewDoctorNote(e.target.value)}
+                rows={4}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsDoctorNoteModalOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleAddDoctorNote} disabled={!newDoctorNote.trim()}>
+              Add Note
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

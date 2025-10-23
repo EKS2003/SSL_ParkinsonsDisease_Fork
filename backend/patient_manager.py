@@ -10,21 +10,25 @@ TEST_HISTORY_FILE = os.path.join(os.path.dirname(__file__), 'test_history.json')
 class Patient:
     def __init__(self,
                  name: str,
-                 age: int,
+                 birthDate: str,
                  height: float,
                  weight: float,
                  lab_results: Dict = None,
                  doctors_notes: str = "",
                  severity: str = "low",
-                 patient_id: str = None):
+                 patient_id: str = None,
+                 lab_results_history: List = None,
+                 doctors_notes_history: List = None):
         self.name = name
-        self.age = age
+        self.birthDate = birthDate
         self.height = height  # in cm
         self.weight = weight  # in kg
         self.lab_results = lab_results or {}
         self.doctors_notes = doctors_notes
         self.severity = severity  # low, medium, high
         self.patient_id = patient_id or self._generate_id()
+        self.lab_results_history = lab_results_history or []
+        self.doctors_notes_history = doctors_notes_history or []
 
     def _generate_id(self) -> str:
         """Generate a unique ID for the patient based on name and current timestamp"""
@@ -37,12 +41,14 @@ class Patient:
         return {
             "patient_id": self.patient_id,
             "name": self.name,
-            "age": self.age,
+            "birthDate": self.birthDate,
             "height": str(self.height),  # Convert to string for API response
             "weight": str(self.weight),  # Convert to string for API response
             "lab_results": self.lab_results,
             "doctors_notes": self.doctors_notes,
-            "severity": self.severity
+            "severity": self.severity,
+            "lab_results_history": self.lab_results_history,
+            "doctors_notes_history": self.doctors_notes_history
         }
 
     @classmethod
@@ -75,14 +81,16 @@ class Patient:
             weight = float(weight_raw) if weight_raw is not None else 0.0
         
         return cls(
+            patient_id=data.get("patient_id"),
             name=data.get("name", ""),
-            age=data.get("age", 0),
+            birthDate=data.get("birthDate", ""),
             height=height,
             weight=weight,
             lab_results=data.get("lab_results", {}),
             doctors_notes=data.get("doctors_notes", ""),
             severity=data.get("severity", "low"),
-            patient_id=data.get("patient_id")
+            lab_results_history=data.get("lab_results_history", []),
+            doctors_notes_history=data.get("doctors_notes_history", [])
         )
 
 
@@ -323,8 +331,12 @@ class PatientManager:
                     patient.weight = float(weight_value)
             if "lab_results" in updated_data:
                 patient.lab_results = updated_data["lab_results"]
+            if "lab_results_history" in updated_data:
+                patient.lab_results_history = updated_data["lab_results_history"]
             if "doctors_notes" in updated_data:
                 patient.doctors_notes = updated_data["doctors_notes"]
+            if "doctors_notes_history" in updated_data:
+                patient.doctors_notes_history = updated_data["doctors_notes_history"]
             if "severity" in updated_data:
                 patient.severity = updated_data["severity"]
 
@@ -479,14 +491,14 @@ class PatientManager:
 
 
 # Utility functions for API integration
-def create_patient(name: str, age: int, height: float, weight: float,
+def create_patient(name: str, birthDate: str, height: float, weight: float,
                    lab_results: Dict = None, doctors_notes: str = "", severity: str = "low") -> Dict:
     """Create a new patient and return their data"""
     manager = PatientManager()
 
     patient = Patient(
         name=name,
-        age=age,
+        birthDate=birthDate,
         height=height,
         weight=weight,
         lab_results=lab_results or {},
@@ -559,14 +571,14 @@ def filter_patients(criteria: Dict) -> Dict:
 
 
 # Async utility functions for FastAPI
-async def async_create_patient(name: str, age: int, height: float, weight: float,
+async def async_create_patient(name: str, birthDate: str, height: float, weight: float,
                                lab_results: Dict = None, doctors_notes: str = "", severity: str = "low") -> Dict:
     """Create a new patient asynchronously"""
     manager = PatientManager()
 
     patient = Patient(
         name=name,
-        age=age,
+        birthDate=birthDate,
         height=height,
         weight=weight,
         lab_results=lab_results or {},
