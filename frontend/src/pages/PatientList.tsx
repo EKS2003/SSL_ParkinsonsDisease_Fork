@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { Plus, Search, User, FileText, AlertCircle, UserPlus, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -24,6 +24,9 @@ const PatientList = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const { toast } = useToast();
   const { isConnected, isChecking } = useApiStatus();
+  const csvFileInputRef = useRef<HTMLInputElement>(null);
+  const [csvFile, setCsvFile] = useState<File | null>(null);
+  const [csvUploading, setCsvUploading] = useState(false);
 
   // Quick add form state
   const [quickFormData, setQuickFormData] = useState({
@@ -60,6 +63,47 @@ const PatientList = () => {
       });
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleCsvUploadClick = () => {
+    if(csvFileInputRef.current){
+      csvFileInputRef.current.value = "";
+      csvFileInputRef.current.click();
+    }
+  };
+
+  const handleCsvFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0] || null;
+    if (!file.name.endsWith('.csv')) {
+      toast({
+        title: "Invalid File Type",
+        description: "Please upload a valid CSV file.",
+        variant: "destructive",
+      });
+      return;
+    }
+    setCsvFile(file);
+  };
+
+  const processCsvFile = async () => {
+    if (!csvFile) return;
+    setCsvUploading(true);
+    try {
+      const text = await csvFile.text();
+      const lines = text.split('\n');
+      const header = lines[0].split(',').map(h => h.trim());
+
+      const patients = [];
+      for (let i = 1; i< lines.length;){
+        
+      }
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to read the CSV file.",
+        variant: "destructive",
+      });
     }
   };
 
@@ -158,17 +202,17 @@ const PatientList = () => {
               )}
             </div>
             <div className="flex items-center space-x-3">
-              {/* Quick Add Modal */}
+              {/* Upload Modal */}
               <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
                 <DialogTrigger asChild>
                   <Button variant="outline" className="border-primary text-primary hover:bg-primary hover:text-primary-foreground">
                     <UserPlus className="mr-2 h-4 w-4" />
-                    Quick Add
+                    Upload Patient
                   </Button>
                 </DialogTrigger>
                 <DialogContent className="sm:max-w-md">
                   <DialogHeader>
-                    <DialogTitle>Quick Add Patient</DialogTitle>
+                    <DialogTitle>Upload Patient</DialogTitle>
                   </DialogHeader>
                   <form onSubmit={handleQuickSubmit} className="space-y-4">
                     <div className="grid grid-cols-2 gap-4">
