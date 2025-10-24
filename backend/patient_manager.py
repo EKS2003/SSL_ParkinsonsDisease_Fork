@@ -15,7 +15,7 @@ class Patient:
                  weight: float,
                  lab_results: Dict = None,
                  doctors_notes: str = "",
-                 severity: str = "low",
+                 severity: str = "stage_1",
                  patient_id: str = None,
                  lab_results_history: List = None,
                  doctors_notes_history: List = None):
@@ -25,7 +25,8 @@ class Patient:
         self.weight = weight  # in kg
         self.lab_results = lab_results or {}
         self.doctors_notes = doctors_notes
-        self.severity = severity  # low, medium, high
+        # severity expected as 'stage_1'..'stage_5' (or 'Stage 1' variants)
+        self.severity = severity
         self.patient_id = patient_id or self._generate_id()
         self.lab_results_history = lab_results_history or []
         self.doctors_notes_history = doctors_notes_history or []
@@ -229,8 +230,12 @@ class PatientManager:
             if weight_value is not None and (weight_value < 0 or weight_value > 500):
                 errors["weight"] = "Weight must be between 0 and 500 kg"
 
-        if "severity" in data and data["severity"] not in ["low", "medium", "high"]:
-            errors["severity"] = "Severity must be one of: low, medium, high"
+        if "severity" in data:
+            import re
+            sev = str(data["severity"]) if data["severity"] is not None else ""
+            # Accept formats like 'stage_1', 'stage 1', or 'Stage 1' where 1-5
+            if not re.match(r'^[sS]tage[_ ]?[1-5]$', sev):
+                errors["severity"] = "Severity must be one of: stage_1 .. stage_5 (or 'Stage 1'..'Stage 5')"
 
         return errors
 

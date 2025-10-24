@@ -7,48 +7,136 @@
     "weight": "70.0",
     "lab_results": {},
     "doctors_notes": "",
-    "severity": "medium"
+    "severity": "medium",
+    "lab_results_history": [],
+    "doctors_notes_history": []
   },
   "testp1759999216": {
     "patient_id": "testp1759999216",
     "name": "Test Patient",
-    "age": 35,
+    "birthDate": "",
     "height": "170.0",
     "weight": "70.0",
     "lab_results": {},
     "doctors_notes": "",
-    "severity": "Stage 1"
+    "severity": "Stage 1",
+    "lab_results_history": [],
+    "doctors_notes_history": []
   },
   "johnd1759999266": {
     "patient_id": "johnd1759999266",
     "name": "John Doe",
-    "age": 34,
+    "birthDate": "",
     "height": "175.0",
     "weight": "80.0",
     "lab_results": {},
     "doctors_notes": "Test notes",
-    "severity": "Stage 2"
+    "severity": "Stage 2",
+    "lab_results_history": [],
+    "doctors_notes_history": []
   },
   "johns1759999595": {
     "patient_id": "johns1759999595",
     "name": "John Smith",
-    "age": 30,
+    "birthDate": "",
     "height": "175.0",
     "weight": "75.0",
     "lab_results": {},
     "doctors_notes": "",
-    "severity": "Stage 2"
+    "severity": "Stage 2",
+    "lab_results_history": [],
+    "doctors_notes_history": []
   },
   "carlo1759999721": {
     "patient_id": "carlo1759999721",
     "name": "Carlos Mendez",
-    "age": 20,
+    "birthDate": "",
     "height": "58.0",
     "weight": "145.0",
     "lab_results": {
       "notes": "n/a"
     },
     "doctors_notes": "n/a",
-    "severity": "Stage 1"
+    "severity": "Stage 1",
+    "lab_results_history": [],
+    "doctors_notes_history": []
+  },
+  "testu1761296994": {
+    "patient_id": "testu1761296994",
+    "name": "Test User",
+    "birthDate": "1980-01-01",
+    "height": "170.0",
+    "weight": "70.0",
+    "lab_results": {},
+    "doctors_notes": "n/a",
+    "severity": "stage_1",
+    "lab_results_history": [],
+    "doctors_notes_history": []
+  },
+  "juanm1761297037": {
+    "patient_id": "juanm1761297037",
+    "name": "Juan Mendez",
+    "birthDate": null,
+    "height": "58.0",
+    "weight": "160.0",
+    "lab_results": {
+      "notes": "n/a"
+    },
+    "doctors_notes": "n/a",
+    "severity": "stage_1",
+    "lab_results_history": [],
+    "doctors_notes_history": []
+  },
+  "carlo1761297231": {
+    "patient_id": "carlo1761297231",
+    "name": "Carlos Mendez",
+    "birthDate": null,
+    "height": "56.0",
+    "weight": "152.0",
+    "lab_results": {
+      "notes": "n/a"
+    },
+    "doctors_notes": "n/a\n",
+    "severity": "stage_1",
+    "lab_results_history": [],
+    "doctors_notes_history": []
+  },
+  "uites1761297371": {
+    "patient_id": "uites1761297371",
+    "name": "UI Test User 1761297371",
+    "birthDate": "1990-01-01",
+    "height": "170.0",
+    "weight": "70.0",
+    "lab_results": {},
+    "doctors_notes": "ui test",
+    "severity": "stage_1",
+    "lab_results_history": [],
+    "doctors_notes_history": []
+  },
+  "uites1761297430": {
+    "patient_id": "uites1761297430",
+    "name": "UI Test User 1761297430",
+    "birthDate": "1990-01-01",
+    "height": "170.0",
+    "weight": "70.0",
+    "lab_results": {},
+    "doctors_notes": "ui test",
+    "severity": "stage_1",
+    "lab_results_history": [],
+    "doctors_notes_history": []
+  },
+  "johnp1761297799": {
+    "patient_id": "johnp1761297799",
+    "name": "John Pork",
+    "birthDate": null,
+    "height": "67.0",
+    "weight": "200.0",
+    "lab_results": {
+      "notes": "n/a"
+    },
+    "doctors_notes": "n/a",
+    "severity": "stage_3",
+    "lab_results_history": [],
+    "doctors_notes_history": []
   }
 }

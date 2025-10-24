@@ -80,12 +80,14 @@ app.add_middleware(
 # ============ Models ============
 class PatientCreate(BaseModel):
     name: str
+    birthDate: Optional[str] = None
     age: int = Field(..., ge=0, le=120)
     height: str = Field(..., min_length=1)
     weight: str = Field(..., min_length=1)
     lab_results: Optional[Dict] = Field(default_factory=dict)
     doctors_notes: Optional[str] = ""
-    severity: str = Field("low", pattern="^(low|medium|high)$")
+    # Accept severity as 'stage_1', 'stage 1', or 'Stage 1' (1-5)
+    severity: str = Field("stage_1", pattern="^[sS]tage[_ ]?[1-5]$")
 
 class PatientUpdate(BaseModel):
     name: Optional[str] = None
@@ -97,13 +99,13 @@ class PatientUpdate(BaseModel):
     lab_results_history: Optional[List[Dict]] = None
     doctors_notes: Optional[str] = None
     doctors_notes_history: Optional[List[Dict]] = None
-    severity: Optional[str] = Field(None, pattern="^(low|medium|high)$")
-    severity: Optional[str] = Field(None, pattern="^(Stage [1-5])$")
+    # Accept updates to severity in 'stage_1' or 'Stage 1' formats
+    severity: Optional[str] = Field(None, pattern="^[sS]tage[_ ]?[1-5]$")
 
 class PatientResponse(BaseModel):
     patient_id: str
     name: str
-    birthDate: str
+    birthDate: Optional[str] = ""
     height: str  # Changed to str to handle existing data
     weight: str  # Changed to str to handle existing data
     lab_results: Dict

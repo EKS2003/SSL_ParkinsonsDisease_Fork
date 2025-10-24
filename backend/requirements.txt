@@ -1,0 +1,11 @@
+fastapi
+uvicorn[standard]
+python-multipart
+mediapipe
+opencv-python-headless
+tslearn
+numpy
+pydantic
+scipy
+pandas
+scikit-learn

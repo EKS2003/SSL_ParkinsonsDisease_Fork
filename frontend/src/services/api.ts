@@ -89,7 +89,7 @@ const convertBackendToFrontend = (backendPatient: BackendPatient) => {
       note: entry.note,
       addedBy: entry.added_by
     })),
-    severity: mapSeverity(backendPatient.severity || 'stage 1'),
+    severity: mapSeverity(backendPatient.severity || 'stage_1'),
     createdAt: new Date(), // Backend doesn't provide this, using current date
     updatedAt: new Date(), // Backend doesn't provide this, using current date
   };
@@ -125,21 +125,45 @@ const convertFrontendToBackend = (frontendPatient: any): BackendPatientCreate =>
     weight: weightStr || '0',
     lab_results: labResults,
     doctors_notes: frontendPatient.doctorNotes || '',
-    severity: mapSeverityToBackend(frontendPatient.severity) || 'Stage 1',
+  severity: mapSeverityToBackend(frontendPatient.severity) || 'stage_1',
   };
 };
 
 const VALID_SEVERITY_LEVELS = ['Stage 1', 'Stage 2', 'Stage 3', 'Stage 4', 'Stage 5'] as const;
 type SeverityLevel = typeof VALID_SEVERITY_LEVELS[number];
 
+// Map backend values (e.g. 'stage_1' or 'stage 1') or frontend display values ('Stage 1')
+// to the canonical frontend display string ("Stage N").
 export const mapSeverity = (severity: string): SeverityLevel => {
-  const normalized = severity.trim();
-  return VALID_SEVERITY_LEVELS.includes(normalized as SeverityLevel) 
-    ? normalized as SeverityLevel 
-    : 'Stage 1';
+  if (!severity) return 'Stage 1';
+
+  // Normalize: accept 'stage_1', 'stage 1', 'Stage 1', etc.
+  const s = String(severity).toLowerCase().trim();
+  // Replace underscores with spaces, collapse multiple whitespace
+  const cleaned = s.replace(/[_]+/g, ' ').replace(/\s+/g, ' ');
+
+  const m = cleaned.match(/stage\s*(\d+)/);
+  if (m) {
+    const n = Number(m[1]);
+    if (n >= 1 && n <= 5) return (`Stage ${n}` as SeverityLevel);
+  }
+
+  // Fallback: if already in correct display format, normalize case/spacing
+  const display = String(severity).trim().replace(/\s+/g, ' ').replace(/^stage\s*(\d+)$/i, (_m, num) => `Stage ${num}`);
+  if (VALID_SEVERITY_LEVELS.includes(display as SeverityLevel)) return display as SeverityLevel;
+
+  return 'Stage 1';
 };
 
-const mapSeverityToBackend = mapSeverity;
+// Map frontend display value to backend representation (e.g. 'Stage 1' -> 'stage_1')
+export const mapSeverityToBackend = (frontendSeverity: string): string => {
+  const display = mapSeverity(frontendSeverity); // ensures 'Stage N'
+  const match = display.match(/Stage\s*(\d+)/i);
+  if (match) {
+    return `stage_${match[1]}`;
+  }
+  return 'stage_1';
+};
 
 // API service class
 class ApiService {
@@ -260,7 +284,7 @@ class ApiService {
       backendData.name = fullName;
     }
     
-    if (updateData.age !== undefined) backendData.birthDate = updateData.age;
+  if (updateData.age !== undefined) backendData.age = updateData.age;
     if (updateData.height) {
       const heightStr = updateData.height.replace(/[^\d.]/g, '');
       backendData.height = heightStr || '0';
