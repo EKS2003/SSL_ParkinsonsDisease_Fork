@@ -45,9 +45,8 @@ class Visit(Base):
         String, ForeignKey("patients.patient_id", ondelete="CASCADE"), nullable=False
     )
     visit_date: Mapped[datetime] = mapped_column(DateTime, nullable=False)
-    progression_note: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    lab_result: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     doctor_notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    vitals_json: Mapped[Optional[Dict]] = mapped_column(JSON, nullable=True)
     status: Mapped[str] = mapped_column(String, default="closed")
 
     # Reverse relationship to Patient

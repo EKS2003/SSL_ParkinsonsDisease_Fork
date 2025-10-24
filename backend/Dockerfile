@@ -20,6 +20,8 @@ RUN pip install --no-cache-dir \
     opencv-python-headless
 
 RUN pip install sqlalchemy
+RUN pip install numpy
+RUN pip install tslearn
 
 COPY . .
 

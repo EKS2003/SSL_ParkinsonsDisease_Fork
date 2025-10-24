@@ -101,7 +101,7 @@ const PatientForm = () => {
         birthDate: formData.birthDate,
         height: formData.height || "170 cm",
         weight: formData.weight || "70 kg",
-        labResults: formData.labResults || "{}",
+        labResults: formData.labResults || "",
         doctorNotes: formData.doctorNotes || "",
         severity: formData.severity,
         createdAt: new Date(),

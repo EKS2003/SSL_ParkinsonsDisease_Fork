@@ -29,7 +29,7 @@ interface BackendPatientCreate {
   birthDate: string;
   height: string;
   weight: string;
-  lab_results?: Record<string, any>;
+  lab_results?: string;
   doctors_notes?: string;
   severity: string;
 }
@@ -109,11 +109,9 @@ const convertFrontendToBackend = (
   return {
     name: fullName,
     birthDate: frontendPatient.birthDate,
-    height: heightStr || "0", // Keep as string for create endpoint
-    weight: weightStr || "0", // Keep as string for create endpoint
-    lab_results: frontendPatient.labResults
-      ? JSON.parse(frontendPatient.labResults)
-      : {},
+    height: heightStr || "0", 
+    weight: weightStr || "0", 
+    lab_results: frontendPatient.labResults,
     doctors_notes: frontendPatient.doctorNotes || "",
     severity: frontendPatient.severity,
   };

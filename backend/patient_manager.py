@@ -1,4 +1,3 @@
-# legacy_api_sql_refactor.py
 from __future__ import annotations
 
 import asyncio
@@ -7,6 +6,9 @@ import re
 from datetime import datetime, date
 from typing import Any, Dict, List, Optional, Union
 
+import json
+from datetime import datetime
+from sqlalchemy.orm import Session
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, Session
 
@@ -74,11 +76,26 @@ def _validate(data: Dict[str, Any]) -> Dict[str, str]:
 
     return errors
 
+def _to_dict(obj: Any) -> Dict[str, Any]:
+    if obj is None:
+        return {}
+    if isinstance(obj, dict):
+        return obj
+    if isinstance(obj, str):
+        try:
+            parsed = json.loads(obj)
+            return parsed if isinstance(parsed, dict) else {"value": parsed}
+        except Exception:
+            return {"value": obj}
+    return {"value": obj}
+
 def _patient_to_api_dict(session: Session, p: Patient) -> Dict[str, Any]:
     vrepo = VisitRepository(session)
-    visits = vrepo.list(patient_id= p.patient_id)  # or however you fetch visits
+    visits = sorted(vrepo.list(patient_id=p.patient_id), key=lambda v: v.visit_date or datetime.min)
     latest = visits[-1] if visits else None
-    vitals = (latest.vitals_json or {}) if latest else {}
+
+    latest_lab = _to_dict(getattr(latest, "lab_result", None)) if latest else {}
+    severity = latest_lab.get("severity", "low")
 
     return {
         "patient_id": p.patient_id,
@@ -86,13 +103,18 @@ def _patient_to_api_dict(session: Session, p: Patient) -> Dict[str, Any]:
         "birthDate": p.dob.isoformat() if p.dob else "",
         "height": str(p.height) if p.height is not None else "0",
         "weight": str(p.weight) if p.weight is not None else "0",
-        "lab_results": vitals.get("lab_results", {}),
         "doctors_notes": (latest.doctor_notes if latest else "") or "",
-        "severity": vitals.get("severity", "low"),
+        "severity": severity,
+        "lab_results": latest_lab or {},
+        # include visit_id + visit_date so the UI can key + date correctly
         "lab_results_history": [
-            (v.vitals_json or {}).get("lab_results", {}) for v in visits
+            {
+                "visit_id": v.visit_id,
+                "visit_date": v.visit_date.isoformat() if v.visit_date else None,
+                **_to_dict(getattr(v, "lab_result", None)),
+            }
+            for v in visits
         ],
-        # 🔧 return dicts, not strings
         "doctors_notes_history": [
             {
                 "note": v.doctor_notes or "",
@@ -102,7 +124,36 @@ def _patient_to_api_dict(session: Session, p: Patient) -> Dict[str, Any]:
             for v in visits
         ],
     }
-# =========================
+    vrepo = VisitRepository(session)
+    # ensure ascending by date; adjust if your repo already sorts
+    visits = sorted(vrepo.list(patient_id=p.patient_id),
+                    key=lambda v: v.visit_date or datetime.min)
+    latest = visits[-1] if visits else None
+
+    latest_lab = _to_dict(getattr(latest, "lab_result", None)) if latest else {}
+    severity = latest_lab.get("severity", "low")
+
+    return {
+        "patient_id": p.patient_id,
+        "name": p.name or "",
+        "birthDate": p.dob.isoformat() if p.dob else "",
+        "height": str(p.height) if p.height is not None else "0",
+        "weight": str(p.weight) if p.weight is not None else "0",
+        "doctors_notes": (latest.doctor_notes if latest else "") or "",
+        "severity": severity,
+        # ✅ add this to satisfy your response model
+        "lab_results": latest_lab or {},
+        # histories are always dicts/objects
+        "lab_results_history": [_to_dict(getattr(v, "lab_result", None)) for v in visits],
+        "doctors_notes_history": [
+            {
+                "note": v.doctor_notes or "",
+                "visit_id": v.visit_id,
+                "visit_date": v.visit_date.isoformat() if v.visit_date else None,
+            }
+            for v in visits
+        ],
+    }
 # Legacy public API (same names/signatures)
 # =========================
 
@@ -111,7 +162,7 @@ def create_patient(
     birthDate: Union[str, date],
     height: Optional[float],
     weight: Optional[float],
-    lab_results: Dict[str, Any],
+    lab_results: str,
     doctors_notes: str,
     severity: str,
 ) -> Dict[str, Any]:
@@ -162,12 +213,18 @@ def create_patient(
             prepo.add(dbp)  # commits
 
             # First visit snapshot to carry legacy fields
+            raw_result = lab_results
+            if isinstance(lab_results, dict):
+                # Only keep the 'value' key if present
+                raw_result = lab_results.get("value", str(lab_results))
+            elif not isinstance(lab_results, str):
+                raw_result = str(lab_results)
+
             visit = Visit(
                 patient_id=patient_id,
                 visit_date=datetime.utcnow(),
                 doctor_notes=doctors_notes or "",
-                progression_note=None,
-                vitals_json={"lab_results": lab_results or {}, "severity": severity},
+                lab_result=raw_result,   
                 status="closed",
             )
             vrepo.add(visit)
@@ -197,9 +254,21 @@ def get_all_patients_info(skip: int = 0, limit: int = 100) -> Dict[str, Any]:
             "skip": skip,
             "limit": limit,
         }
+    
+
+def _extract_lab_result_value(v: Any) -> Optional[str]:
+    """Return only the textual value to persist into Visit.lab_result (Text)."""
+    if v is None:
+        return None
+    if isinstance(v, dict):
+        # Keep only the 'value' field if provided, otherwise stringify the dict
+        return v.get("value", str(v))
+    if isinstance(v, str):
+        return v
+    return str(v)
 
 def update_patient_info(patient_id: str, updated_data: Dict[str, Any]) -> Dict[str, Any]:
-    errs = _validate(updated_data)
+    errs = _validate(updated_data)  # assumes your _validate handles partials
     if errs:
         return {"success": False, "errors": errs}
 
@@ -211,37 +280,55 @@ def update_patient_info(patient_id: str, updated_data: Dict[str, Any]) -> Dict[s
         if not dbp:
             return {"success": False, "error": "Patient not found"}
 
-        # Basic Patient columns
-        patch: Dict[str, Any] = {}
+        # --- Patch basic Patient columns ---
+        changed = False
         if "name" in updated_data:
-            patch["name"] = updated_data["name"]
+            dbp.name = updated_data["name"]; changed = True
+
         if "birthDate" in updated_data:
             bd = updated_data["birthDate"]
-            patch["dob"] = date.fromisoformat(bd) if bd else None
+            dbp.dob = date.fromisoformat(bd) if bd else None
+            changed = True
+
         if "height" in updated_data:
             h = _parse_number(updated_data["height"], 0, 300)
-            patch["height"] = int(h) if h is not None else None
+            dbp.height = int(h) if h is not None else None
+            changed = True
+
         if "weight" in updated_data:
             w = _parse_number(updated_data["weight"], 0, 500)
-            patch["weight"] = int(w) if w is not None else None
+            dbp.weight = int(w) if w is not None else None
+            changed = True
 
-        if patch:
-            prepo.update(patient_id, patch)
+        if changed:
+            session.commit()
 
-        # Legacy JSON fields -> append a new Visit snapshot
-        if any(k in updated_data for k in ("doctors_notes", "lab_results", "severity")):
-            vitals_payload: Dict[str, Any] = {}
-            if "lab_results" in updated_data:
-                vitals_payload["lab_results"] = updated_data["lab_results"]
-            if "severity" in updated_data:
-                vitals_payload["severity"] = updated_data["severity"]
+        # --- New Visit snapshot if any visit-scoped fields provided ---
+        # Accept either 'lab_result' or 'lab_results' from caller
+        lab_input = updated_data.get("lab_result")
+        if lab_input is None:
+            lab_input = updated_data.get("lab_results")
 
-            vrepo.add_visit(
+        lab_text = _extract_lab_result_value(lab_input)
+        notes_text = updated_data.get("doctors_notes") or ""
+
+        new_visit_needed = any(
+            k in updated_data for k in ("doctors_notes", "lab_result", "lab_results", "severity")
+        )
+
+        if new_visit_needed:
+            visit = Visit(
                 patient_id=patient_id,
-                doctor_notes=updated_data.get("doctors_notes") or "",
-                vitals_json=vitals_payload or None,
+                visit_date=datetime.utcnow(),
+                doctor_notes=notes_text,
+                lab_result=lab_text,   # TEXT column; stores only the value
                 status="closed",
             )
+            # If your repo takes a model instance:
+            vrepo.add(visit)
+            # If instead your repo expects kwargs, switch to:
+            # vrepo.add(patient_id=patient_id, visit_date=datetime.utcnow(),
+            #           doctor_notes=notes_text, lab_result=lab_text, status="closed")
 
         return {"success": True, "patient_id": patient_id}
 

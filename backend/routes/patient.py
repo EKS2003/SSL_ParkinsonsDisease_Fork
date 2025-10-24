@@ -21,7 +21,7 @@ class PatientCreate(BaseModel):
     birthDate: date                                      # <-- use birthDate not age
     height: Optional[Union[float, str]] = None
     weight: Optional[Union[float, str]] = None
-    lab_results: Optional[Union[Dict[str, Any], str]] = Field(default_factory=dict)
+    lab_results: Union[str, Dict[str, Any]] = Field(default_factory=dict)    
     doctors_notes: Optional[str] = ""
     severity: str
 
@@ -37,27 +37,27 @@ class PatientCreate(BaseModel):
 
     @field_validator("lab_results", mode="before")
     @classmethod
-    def _to_dict(cls, v):
-        if v in (None, "", {}):
-            return {}
-        if isinstance(v, dict):
-            return v
-        try:
-            parsed = json.loads(str(v))
-            return parsed if isinstance(parsed, dict) else {"value": parsed}
-        except Exception:
-            return {"value": v}
+    def coerce_lab_results(cls, v):
+        if v is None: return {}
+        if isinstance(v, dict): return v
+        if isinstance(v, str):
+            import json
+            try:
+                parsed = json.loads(v)
+                return parsed if isinstance(parsed, dict) else {"value": parsed}
+            except Exception:
+                return {"value": v}
+        return {"value": v}
 
 class PatientUpdate(BaseModel):
     name: Optional[str] = None
     birthDate: Optional[date] = None                     # <-- keep birthDate for updates too
     height: Optional[Union[float, str]] = None
     weight: Optional[Union[float, str]] = None
-    lab_results: Optional[Union[Dict[str, Any], str]] = None
-    lab_results_history: Optional[List[Dict[str, Any]]] = None
+    lab_results: Union[str, Dict[str, Any]] = Field(default_factory=dict)    
     doctors_notes: Optional[str] = None
     doctors_notes_history: Optional[List[Dict[str, Any]]] = None
-    severity: Optional[str] 
+    severity: Optional[str] = None
 
     @field_validator("height", "weight", mode="before")
     @classmethod
@@ -85,14 +85,15 @@ class PatientUpdate(BaseModel):
 class PatientResponse(BaseModel):
     patient_id: str
     name: str
-    birthDate: str                                       # ISO string in your current API
+    birthDate: str
     height: str
     weight: str
-    lab_results: Dict[str, Any]
     doctors_notes: str
     severity: str
-    lab_results_history: Optional[List[Dict[str, Any]]] = []
-    doctors_notes_history: Optional[List[Dict[str, Any]]] = []
+    lab_results: Dict[str, Any] = Field(default_factory=dict)
+    lab_results_history: List[Dict[str, Any]] = Field(default_factory=list)   # <-- add
+    doctors_notes_history: List[Dict[str, Any]] = Field(default_factory=list)
+
 
 class PatientsListResponse(BaseModel):
     success: bool
@@ -141,29 +142,26 @@ async def get_patients(
 ):
     return await async_get_all_patients_info(skip, limit)
 
-@router.get("/{patient_id}", response_model=Dict)
+@router.get("/{patient_id}", response_model=PatientResponse)
 async def get_patient(patient_id: str):
     result = await async_get_patient_info(patient_id)
-
-    if not result.get("success", False):
+    if not result.get("success"):
         raise HTTPException(status_code=404, detail="Patient not found")
-
-    return result
+    return result["patient"]
 
 @router.put("/{patient_id}", response_model=Dict)
 async def update_patient(patient_id: str, patient_update: PatientUpdate):
-    update_data = {k: v for k, v in patient_update.dict().items() if v is not None}
-
+    update_data = patient_update.model_dump(exclude_unset=True)
+    if update_data.get("lab_results") == {}:
+        update_data.pop("lab_results")
     if not update_data:
-        raise HTTPException(status_code=400, detail="No valid update data provided")
+        return {"success": True, "patient_id": patient_id}  # no-op instead of 400
 
     result = await async_update_patient_info(patient_id, update_data)
-
-    if not result.get("success", False):
+    if not result.get("success"):
         if "errors" in result:
             raise HTTPException(status_code=400, detail=result["errors"])
         raise HTTPException(status_code=404, detail=result.get("error", "Failed to update patient"))
-
     return result
 
 @router.delete("/{patient_id}", response_model=Dict)

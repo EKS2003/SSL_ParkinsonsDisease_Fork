@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useState} from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { ArrowLeft, Plus, Calendar, FileText, Activity, Edit, Play, Clock, User, Stethoscope } from 'lucide-react';
+import { ArrowLeft, Plus, Calendar, FileText, Activity, Edit, Play, User, Stethoscope } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -8,57 +8,23 @@ import { Separator } from '@/components/ui/separator';
 import { Patient, Test, LabResultEntry, DoctorNoteEntry } from '@/types/patient';
 import { getSeverityColor, calculateAge } from '@/lib/utils';
 import { mapSeverity } from '@/services/api';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
 
-// Mock data - replace with actual data fetching
-const mockPatient: Patient = {
-  id: '1',
-  firstName: 'John',
-  lastName: 'Smith',
-  recordNumber: 'P001',
-  birthDate: '1980-05-15',
-  height: '5\'8"',
-  weight: '170 lbs',
-  labResults: 'Normal CBC, elevated dopamine markers, glucose 95 mg/dL',
-  doctorNotes: 'Patient shows mild tremor in right hand. Responds well to L-DOPA treatment. Recommend continued monitoring and physical therapy.',
-  severity: 'Stage 1',
-  createdAt: new Date('2024-01-15'),
-  updatedAt: new Date('2024-01-20'),
+// ---------- Date helpers ----------
+const isValidDate = (d: unknown): d is Date => d instanceof Date && !Number.isNaN(d.getTime());
+const asDate = (v: unknown): Date => {
+  const d = v instanceof Date ? v : new Date(v as any);
+  return isValidDate(d) ? d : new Date(); // or choose to return new Date(0) / null
 };
-
-const mockTests: Test[] = [
-  {
-    id: 'test1',
-    patientId: '1',
-    name: 'Stand and Sit Assessment',
-    type: 'stand-and-sit',
-    date: new Date('2024-01-20'),
-    status: 'completed',
-  },
-  {
-    id: 'test2',
-    patientId: '1',
-    name: 'Palm Open Evaluation',
-    type: 'palm-open',
-    date: new Date('2024-01-18'),
-    status: 'completed',
-  },
-  {
-    id: 'test3',
-    patientId: '1',
-    name: 'Stand and Sit Assessment',
-    type: 'stand-and-sit',
-    date: new Date('2024-01-15'),
-    status: 'completed',
-  },
-];
-
-
+const toISO = (v: unknown): string => {
+  const d = v instanceof Date ? v : new Date(v as any);
+  return isValidDate(d) ? d.toISOString() : new Date().toISOString();
+};
 
 const PatientDetails = () => {
   const { id } = useParams<{ id: string }>();
@@ -77,14 +43,14 @@ const PatientDetails = () => {
   const openForEdit = useCallback(() => {
     if (!patient) return;
     setEditData({
-      firstName: patient.firstName ?? "",
-      lastName: patient.lastName ?? "",
-      birthDate: patient.birthDate ?? "",
-      height: patient.height ?? "",
-      weight: patient.weight ?? "",
-      labResults: patient.labResults ?? "",
-      doctorNotes: patient.doctorNotes ?? "",
-      severity: (patient.severity as Patient["severity"]) ?? "Stage 1",
+      firstName: patient.firstName ?? '',
+      lastName: patient.lastName ?? '',
+      birthDate: patient.birthDate ?? '',
+      height: patient.height ?? '',
+      weight: patient.weight ?? '',
+      labResults: patient.labResults ?? '',
+      doctorNotes: patient.doctorNotes ?? '',
+      severity: (patient.severity as Patient['severity']) ?? 'Stage 1',
     });
     setIsEditOpen(true);
   }, [patient]);
@@ -97,109 +63,90 @@ const PatientDetails = () => {
     setIsEditOpen(false);
   };
 
+  // --- Send ONE lab result per submit (optimistic UI + rollback) ---
   const handleAddLabResult = async () => {
     if (!patient || !newLabResult.trim()) return;
-    
+
     const newEntry: LabResultEntry = {
       id: `lab_${Date.now()}`,
       date: new Date(),
-      results: newLabResult,
-      addedBy: 'Current User' // In a real app, this would come from auth context
+      results: newLabResult.trim(),
+      addedBy: 'Current User', // In a real app, this would come from auth context
     };
 
-    const updatedHistory = [...(patient.labResultsHistory || []), newEntry];
-    const updatedPatient = { ...patient, labResultsHistory: updatedHistory };
-    
-    // Update local state immediately for UI responsiveness
-    setPatient(updatedPatient);
+    const prev = patient;
+    const updated = {
+      ...patient,
+      labResultsHistory: [...(patient.labResultsHistory ?? []), newEntry],
+    };
+
+    // optimistic UI
+    setPatient(updated);
     setNewLabResult('');
     setIsLabResultModalOpen(false);
 
-    // Persist to backend
     try {
-      const response = await fetch(`http://localhost:8000/patients/${patient.id}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          lab_results_history: updatedHistory.map(entry => ({
-            id: entry.id,
-            date: entry.date.toISOString(),
-            results: entry.results,
-            added_by: entry.addedBy
-          }))
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to save lab result');
-      }
-
-      toast({
-        title: "Lab Result Added",
-        description: "The lab result has been successfully recorded.",
-      });
-    } catch (error) {
-      console.error('Error saving lab result:', error);
-      toast({
-        title: "Error",
-        description: "Failed to save lab result to server.",
-        variant: "destructive",
-      });
+      const res = await fetch(`http://localhost:8000/patients/${patient.id}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ lab_results: { value: newLabResult.trim() } }), // <-- not lab_results_history
+  });
+      const text = await res.text();
+      if (!res.ok) throw new Error(`Save failed ${res.status}: ${text}`);
+      toast({ title: 'Lab Result Added', description: 'Recorded successfully.' });
+    } catch (e) {
+      console.error('Error saving lab result:', e);
+      // rollback
+      setPatient(prev);
+      toast({ title: 'Error', description: 'Failed to save lab result.', variant: 'destructive' });
     }
   };
 
+  // --- OPTIONAL: Send ONE doctor note per submit (same pattern) ---
   const handleAddDoctorNote = async () => {
     if (!patient || !newDoctorNote.trim()) return;
-    
+
     const newEntry: DoctorNoteEntry = {
       id: `note_${Date.now()}`,
       date: new Date(),
-      note: newDoctorNote,
-      addedBy: 'Current User' // In a real app, this would come from auth context
+      note: newDoctorNote.trim(),
+      addedBy: 'Current User',
     };
 
-    const updatedHistory = [...(patient.doctorNotesHistory || []), newEntry];
-    const updatedPatient = { ...patient, doctorNotesHistory: updatedHistory };
-    
-    // Update local state immediately for UI responsiveness
-    setPatient(updatedPatient);
+    const prev = patient;
+    const updated = {
+      ...patient,
+      doctorNotesHistory: [...(patient.doctorNotesHistory ?? []), newEntry],
+    };
+
+    // optimistic UI
+    setPatient(updated);
     setNewDoctorNote('');
     setIsDoctorNoteModalOpen(false);
 
-    // Persist to backend
     try {
-      const response = await fetch(`http://localhost:8000/patients/${patient.id}`, {
+      const res = await fetch(`http://localhost:8000/patients/${patient.id}`, {
         method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          doctors_notes_history: updatedHistory.map(entry => ({
-            id: entry.id,
-            date: entry.date.toISOString(),
-            note: entry.note,
-            added_by: entry.addedBy
-          }))
+          doctors_notes_history: [
+            {
+              id: newEntry.id,
+              date: toISO(newEntry.date),
+              note: newEntry.note,
+              added_by: newEntry.addedBy ?? null,
+            },
+          ],
         }),
       });
-
-      if (!response.ok) {
-        throw new Error('Failed to save doctor note');
-      }
-
-      toast({
-        title: "Note Added",
-        description: "The doctor's note has been successfully recorded.",
-      });
-    } catch (error) {
-      console.error('Error saving doctor note:', error);
-      toast({
-        title: "Error",
-        description: "Failed to save doctor's note to server.",
-        variant: "destructive",
-      });
+      const text = await res.text();
+      if (!res.ok) throw new Error(`Save failed ${res.status}: ${text}`);
+      toast({ title: 'Note Added', description: 'Recorded successfully.' });
+    } catch (e) {
+      console.error('Error saving doctor note:', e);
+      // rollback
+      setPatient(prev);
+      toast({ title: 'Error', description: "Couldn't save doctor's note.", variant: 'destructive' });
     }
   };
 
@@ -213,40 +160,41 @@ const PatientDetails = () => {
           throw new Error(data.detail || 'Failed to fetch patient');
         }
 
+        const notesHist = data.doctors_notes_history || [];
+        const labsHist  = (data.lab_results_history || []).map((e:any, i:number) => ({
+          id: notesHist[i]?.visit_id ?? `lab_${i}`,
+          date: asDate(notesHist[i]?.visit_date),           // dates live in doctors_notes_history
+          results: e?.value ?? (typeof e === 'string' ? e : ''), // lab_results_history entries are dicts like {value: "..."}
+          addedBy: undefined,
+        }));
+
         // Debug logging
         console.log('API Response:', data);
-        console.log('Patient data:', data.patient);
-        console.log('Lab results history:', data.patient?.lab_results_history);
-        console.log('Doctor notes history:', data.patient?.doctors_notes_history);
+        console.log('Patient data:', data);
+        console.log('Lab results history:', data?.lab_results_history);
+        console.log('Doctor notes history:', data?.doctors_notes_history);
 
-        const [firstName, lastName] = data.patient.name.split(' ');
+        const [firstName, lastName] = (data.name ?? '').split(' ');
 
         setPatient({
-          id: data.patient.patient_id,
-          firstName,
-          lastName,
-          recordNumber: data.patient.patient_id, // Use patient_id as record number
-          birthDate: data.patient.birthDate,
-          height: `${data.patient.height}`,
-          weight: `${data.patient.weight}`,
-          labResults: data.patient.lab_results?.notes || '',
-          doctorNotes: data.patient.doctors_notes || '',
-          labResultsHistory: (data.patient.lab_results_history || []).map((entry: any) => ({
-            id: entry.id,
-            date: new Date(entry.date),
-            results: entry.results,
-            addedBy: entry.added_by
-          })),
-          doctorNotesHistory: (data.patient.doctors_notes_history || []).map((entry: any) => ({
-            id: entry.id,
-            date: new Date(entry.date),
-            note: entry.note,
-            addedBy: entry.added_by
-          })),
-          severity: mapSeverity(data.patient.severity),
-          createdAt: new Date(), // Optional: replace with actual timestamps
-          updatedAt: new Date(),
-        });
+  id: data.patient_id,
+  firstName: (data.name ?? '').split(' ')[0] ?? '',
+  lastName:  (data.name ?? '').split(' ').slice(1).join(' ') ?? '',
+  recordNumber: data.patient_id,
+  birthDate: data.birthDate,
+  height: `${data.height}`,
+  weight: `${data.weight}`,
+  labResults: data.lab_results?.value ?? '',   // <-- was .notes
+  doctorNotes: data.doctors_notes || '',
+  labResultsHistory: labsHist,
+  doctorNotesHistory: notesHist.map((e:any) => ({
+    id: e.visit_id, date: asDate(e.visit_date), note: e.note, addedBy: e.added_by
+  })),
+  severity: mapSeverity(data.severity),
+  createdAt: new Date(), updatedAt: new Date(),
+});
+
+        setTests([]);
       } catch (err: any) {
         setError(err.message);
       } finally {
@@ -307,21 +255,13 @@ const PatientDetails = () => {
                 <h1 className="text-3xl font-bold text-foreground">
                   {patient.firstName} {patient.lastName}
                 </h1>
-                <p className="text-muted-foreground mt-1">
-                  Record: {patient.recordNumber || 'N/A'}
-                </p>
+                <p className="text-muted-foreground mt-1">Record: {patient.recordNumber || 'N/A'}</p>
               </div>
             </div>
             <div className="flex items-center space-x-3">
-              {/* <Link to={`/patient/${id}/edit`}>
-                <Button variant="outline">
-                  <Edit className="mr-2 h-4 w-4" />
-                  Edit Patient
-                </Button>
-              </Link> */}
               <Button variant="outline" onClick={openForEdit}>
                 <Edit className="mr-2 h-4 w-4" />
-                Edit Patient  
+                Edit Patient
               </Button>
               <Link to={`/patient/${id}/test-selection`}>
                 <Button className="bg-primary hover:bg-primary-hover">
@@ -342,9 +282,7 @@ const PatientDetails = () => {
               <CardHeader>
                 <CardTitle className="flex items-center justify-between">
                   Patient Information
-                  <Badge className={getSeverityColor(patient.severity)}>
-                    {patient.severity}
-                  </Badge>
+                  <Badge className={getSeverityColor(patient.severity)}>{patient.severity}</Badge>
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
@@ -354,9 +292,7 @@ const PatientDetails = () => {
                     <p className="text-lg font-semibold">
                       {patient.birthDate || 'N/A'}
                       {patient.birthDate && (
-                        <span className="text-sm text-muted-foreground ml-2">
-                          (Age: {calculateAge(patient.birthDate)} years)
-                        </span>
+                        <span className="text-sm text-muted-foreground ml-2">(Age: {calculateAge(patient.birthDate)} years)</span>
                       )}
                     </p>
                     <p className="text-xs text-muted-foreground/70">YYYY-MM-DD format</p>
@@ -388,7 +324,7 @@ const PatientDetails = () => {
                   <div className="space-y-3">
                     {patient.labResultsHistory && patient.labResultsHistory.length > 0 ? (
                       patient.labResultsHistory
-                        .sort((a, b) => b.date.getTime() - a.date.getTime())
+                        .sort((a, b) => a.date.getTime() - b.date.getTime())
                         .map((entry) => (
                           <div key={entry.id} className="border rounded-lg p-4 bg-card">
                             <div className="flex items-start justify-between mb-2">
@@ -402,9 +338,7 @@ const PatientDetails = () => {
                                   </>
                                 )}
                               </div>
-                              <span className="text-xs text-muted-foreground">
-                                {entry.date.toLocaleTimeString()}
-                              </span>
+                              <span className="text-xs text-muted-foreground">{entry.date.toLocaleTimeString()}</span>
                             </div>
                             <p className="text-sm">{entry.results}</p>
                           </div>
@@ -428,7 +362,7 @@ const PatientDetails = () => {
                   <div className="space-y-3">
                     {patient.doctorNotesHistory && patient.doctorNotesHistory.length > 0 ? (
                       patient.doctorNotesHistory
-                        .sort((a, b) => b.date.getTime() - a.date.getTime())
+                        .sort((a, b) => a.date.getTime() - b.date.getTime())
                         .map((entry) => (
                           <div key={entry.id} className="border rounded-lg p-4 bg-muted/50">
                             <div className="flex items-start justify-between mb-2">
@@ -442,9 +376,7 @@ const PatientDetails = () => {
                                   </>
                                 )}
                               </div>
-                              <span className="text-xs text-muted-foreground">
-                                {entry.date.toLocaleTimeString()}
-                              </span>
+                              <span className="text-xs text-muted-foreground">{entry.date.toLocaleTimeString()}</span>
                             </div>
                             <p className="text-sm">{entry.note}</p>
                           </div>
@@ -515,7 +447,7 @@ const PatientDetails = () => {
 
       {/* Edit Patient pop up*/}
       <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>
-        <DialogContent>
+        <DialogContent aria-describedby={undefined}>
           <DialogHeader>
             <DialogTitle className="mb-4 text-lg font-semibold">Edit Patient Details</DialogTitle>
           </DialogHeader>
@@ -523,39 +455,23 @@ const PatientDetails = () => {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <Label htmlFor="firstName">First Name</Label>
-                <Input
-                  id="firstName"
-                  value={editData.firstName ?? ""}
-                  onChange={(e) => setEditData(d => ({ ...d, firstName: e.target.value }))}
-                />
+                <Input id="firstName" value={editData.firstName ?? ''} onChange={(e) => setEditData((d) => ({ ...d, firstName: e.target.value }))} />
               </div>
               <div>
                 <Label htmlFor="lastName">Last Name</Label>
-                <Input
-                  id="lastName"
-                  value={editData.lastName ?? ""}
-                  onChange={(e) => setEditData(d => ({ ...d, lastName: e.target.value }))}
-                />
+                <Input id="lastName" value={editData.lastName ?? ''} onChange={(e) => setEditData((d) => ({ ...d, lastName: e.target.value }))} />
               </div>
               <div>
                 <Label htmlFor="birthDate">Birthdate</Label>
-                <Input
-                  id="birthDate"
-                  type="date"
-                  value={editData.birthDate ?? ""}
-                  onChange={(e) => setEditData(d => ({ ...d, birthDate: e.target.value }))}
-                />
+                <Input id="birthDate" type="date" value={editData.birthDate ?? ''} onChange={(e) => setEditData((d) => ({ ...d, birthDate: e.target.value }))} />
               </div>
               <div>
                 <Label htmlFor="severity">Severity</Label>
-                <Select
-                  value={editData.severity ?? "Stage 1"}
-                  onValueChange={(v) => setEditData(d => ({ ...d, severity: v as Patient["severity"] }))}
-                >
+                <Select value={editData.severity ?? 'Stage 1'} onValueChange={(v) => setEditData((d) => ({ ...d, severity: v as Patient['severity'] }))}>
                   <SelectTrigger id="severity">
                     <SelectValue placeholder="Select severity" />
                   </SelectTrigger>
-                  <SelectContent position='popper' className="z-[60]">
+                  <SelectContent position="popper" className="z-[60]">
                     <SelectItem value="Stage 1">Stage 1</SelectItem>
                     <SelectItem value="Stage 2">Stage 2</SelectItem>
                     <SelectItem value="Stage 3">Stage 3</SelectItem>
@@ -566,42 +482,22 @@ const PatientDetails = () => {
               </div>
               <div>
                 <Label htmlFor="height">Height</Label>
-                <Input
-                  id="height"
-                  placeholder="e.g., 170 cm"
-                  value={editData.height ?? ""}
-                  onChange={(e) => setEditData(d => ({ ...d, height: e.target.value }))}
-                />
+                <Input id="height" placeholder="e.g., 170 cm" value={editData.height ?? ''} onChange={(e) => setEditData((d) => ({ ...d, height: e.target.value }))} />
               </div>
               <div>
                 <Label htmlFor="weight">Weight</Label>
-                <Input
-                  id="weight"
-                  placeholder="e.g., 70 kg"
-                  value={editData.weight ?? ""}
-                  onChange={(e) => setEditData(d => ({ ...d, weight: e.target.value }))}
-                />
+                <Input id="weight" placeholder="e.g., 70 kg" value={editData.weight ?? ''} onChange={(e) => setEditData((d) => ({ ...d, weight: e.target.value }))} />
               </div>
             </div>
 
             <div>
               <Label htmlFor="labResults">Lab Results</Label>
-              <Textarea
-                id="labResults"
-                rows={3}
-                value={editData.labResults ?? ""}
-                onChange={(e) => setEditData(d => ({ ...d, labResults: e.target.value }))}
-              />
+              <Textarea id="labResults" rows={3} value={editData.labResults ?? ''} onChange={(e) => setEditData((d) => ({ ...d, labResults: e.target.value }))} />
             </div>
 
             <div>
               <Label htmlFor="doctorNotes">Doctor Notes</Label>
-              <Textarea
-                id="doctorNotes"
-                rows={4}
-                value={editData.doctorNotes ?? ""}
-                onChange={(e) => setEditData(d => ({ ...d, doctorNotes: e.target.value }))}
-              />
+              <Textarea id="doctorNotes" rows={4} value={editData.doctorNotes ?? ''} onChange={(e) => setEditData((d) => ({ ...d, doctorNotes: e.target.value }))} />
             </div>
 
             <div className="flex justify-end gap-2 pt-2">
@@ -616,20 +512,14 @@ const PatientDetails = () => {
 
       {/* Lab Result Modal */}
       <Dialog open={isLabResultModalOpen} onOpenChange={setIsLabResultModalOpen}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent aria-describedby={undefined} className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Add Lab Result</DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
             <div>
               <Label htmlFor="labResult">Lab Results</Label>
-              <Textarea
-                id="labResult"
-                placeholder="Enter lab results (e.g., CBC: Normal, Dopamine markers: 120 ng/mL...)"
-                value={newLabResult}
-                onChange={(e) => setNewLabResult(e.target.value)}
-                rows={4}
-              />
+              <Textarea id="labResult" placeholder="Enter lab results (e.g., CBC: Normal, Dopamine markers: 120 ng/mL...)" value={newLabResult} onChange={(e) => setNewLabResult(e.target.value)} rows={4} />
             </div>
           </div>
           <DialogFooter>
@@ -645,20 +535,14 @@ const PatientDetails = () => {
 
       {/* Doctor Note Modal */}
       <Dialog open={isDoctorNoteModalOpen} onOpenChange={setIsDoctorNoteModalOpen}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent aria-describedby={undefined} className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Add Doctor's Note</DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
             <div>
               <Label htmlFor="doctorNote">Doctor's Note</Label>
-              <Textarea
-                id="doctorNote"
-                placeholder="Enter doctor's notes or observations..."
-                value={newDoctorNote}
-                onChange={(e) => setNewDoctorNote(e.target.value)}
-                rows={4}
-              />
+              <Textarea id="doctorNote" placeholder="Enter doctor's notes or observations..." value={newDoctorNote} onChange={(e) => setNewDoctorNote(e.target.value)} rows={4} />
             </div>
           </div>
           <DialogFooter>
@@ -672,8 +556,6 @@ const PatientDetails = () => {
         </DialogContent>
       </Dialog>
     </div>
-
-
   );
 };
 
