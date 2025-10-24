@@ -89,24 +89,282 @@ const PatientList = () => {
     setCsvFile(file);
   };
 
+  const parseCSVLine = (line: string) => {
+    const result: string[] = [];
+    let cur = '';
+    let inQuotes = false;
+    for (let i = 0; i < line.length; i++) {
+      const ch = line[i];
+      if (ch === '"' && line[i + 1] === '"') {
+        cur += '"';
+        i++; // skip escape
+        continue;
+      }
+      if (ch === '"') {
+        inQuotes = !inQuotes;
+        continue;
+      }
+      if (ch === ',' && !inQuotes) {
+        result.push(cur.trim());
+        cur = '';
+        continue;
+      }
+      cur += ch;
+    }
+    result.push(cur.trim());
+    return result;
+  };
+
+  const normalizeHeaderName = (h: string) => {
+    return h
+      .toLowerCase()
+      .replace(/[^a-z0-9]/g, '')
+      .trim();
+  }
+
+  // Parse several common date formats and return ISO yyyy-mm-dd or null
+  // ISO means ISO 8601 date format
+  const parseDateToISO = (val: string): string | null => {
+    if (!val) return null;
+    const s = val.trim();
+
+    // If already ISO yyyy-mm-dd
+    if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+
+    // Match numeric formats like dd-mm-yyyy, dd/mm/yyyy, mm/dd/yyyy
+    const m = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
+    if (m) {
+      const a = Number(m[1]);
+      const b = Number(m[2]);
+      const y = Number(m[3]);
+
+      let day: number;
+      let month: number;
+
+      // If first component > 12 it's day
+      if (a > 12) {
+        day = a; month = b;
+      } else if (b > 12) {
+        // If second component > 12 treat first as day
+        day = a; month = b;
+      } else {
+        // Ambiguous: use '-' as dd-mm-yyyy heuristic, '/' as mm/dd/yyyy
+        if (s.includes('-')) {
+          day = a; month = b;
+        } else {
+          month = a; day = b;
+        }
+      }
+
+      if (month < 1 || month > 12 || day < 1 || day > 31) return null;
+      const mm = String(month).padStart(2, '0');
+      const dd = String(day).padStart(2, '0');
+      return `${y}-${mm}-${dd}`;
+    }
+
+    const d = new Date(s);
+    if (!isNaN(d.getTime())) return d.toISOString().slice(0, 10);
+    return null;
+  };
+
+  const headerToKey = (h:string) => {
+    const n = normalizeHeaderName(h);
+
+    if (['firstname', 'first', 'givenname', 'given'].includes(n)) return 'firstName';
+    if (['lastname', 'last', 'surname', 'familyname'].includes(n)) return 'lastName';
+    if (['fullname', 'name', 'fullName', 'fullname'].includes(n.toLowerCase())) return 'fullName';
+    if (['birthdate', 'dob', 'dateofbirth', 'birth'].includes(n)) return 'birthDate';
+    if (['height', 'ht'].includes(n)) return 'height';
+    if (['weight', 'wt'].includes(n)) return 'weight';
+    if (['recordnumber', 'recordno', 'record', 'id', 'patientid'].includes(n)) return 'recordNumber';
+    if (['severity', 'stage', 'parkinsonseverity'].includes(n)) return 'severity';
+    if (['labresults', 'lab_result', 'labs', 'lab'].includes(n)) return 'labResults';
+    if (['doctornotes', 'doctornote', 'notes', 'note'].includes(n)) return 'doctorNotes';
+    return n; // fallback: keep original normalized header
+  }
+
+  const normalizeSeverity = (val: string | undefined | null) => {
+    if (!val) return '';
+    const v = val.trim();
+    const num = parseInt(v, 10);
+
+    if (!isNaN(num) && num >= 1 && num <= 5) return `Stage ${num}`;
+
+    const m = v.match(/([sS]tage)[_\-\s]?([1-5])/);
+    if (m) return `Stage ${m[2]}`;
+
+    const m2 = v.match(/^[Ss]tage\s*[1-5]$/);
+
+    if (m2) return v.startsWith('Stage') ? v : `Stage ${v.replace(/\D/g, '')}`;
+
+    const low = ['mild', 'low', 'stage1', 'stage_1'];
+    const med = ['moderate', 'medium', 'stage3', 'stage_3'];
+    const high = ['severe', 'high', 'stage5', 'stage_5'];
+    const lower = v.toLowerCase();
+    if (low.includes(lower)) return 'Stage 1';
+    if (med.includes(lower)) return 'Stage 3';
+    if (high.includes(lower)) return 'Stage 5';
+    return v;
+  };
+
   const processCsvFile = async () => {
     if (!csvFile) return;
     setCsvUploading(true);
     try {
       const text = await csvFile.text();
-      const lines = text.split('\n');
-      const header = lines[0].split(',').map(h => h.trim());
-
-      const patients = [];
-      for (let i = 1; i< lines.length;){
-        
+      const lines = text.split(/\r?\n/).filter(l => l.trim().length > 0);
+      if (lines.length < 2) {
+        toast({
+          title: 'Empty CSV',
+          description: 'CSV must contain a header and at least one data row.',
+          variant: 'destructive',
+        });
+        setCsvUploading(false);
+        return;
       }
+
+      const rawHeader = parseCSVLine(lines[0]);
+      const headerMap: Record<number, string> = {};
+      rawHeader.forEach((h, idx) => {
+        headerMap[idx] = headerToKey(h);
+      });
+
+      const rows = lines.slice(1);
+      const toCreate: any[] = [];
+      for (const row of rows) {
+        const cols = parseCSVLine(row);
+        if (cols.every(c => c === '')) continue;
+
+        const item: any = {
+          firstName: '',
+          lastName: '',
+          recordNumber: '',
+          birthDate: '',
+          height: '',
+          weight: '',
+          labResults: '{}',
+          doctorNotes: '',
+          severity: '',
+        };
+
+        for (let i = 0; i < cols.length; i++) {
+          const key = headerMap[i];
+          const val = cols[i] ?? '';
+          if (!key) continue;
+          switch (key) {
+            case 'firstName':
+              item.firstName = val;
+              break;
+            case 'lastName':
+              item.lastName = val;
+              break;
+            case 'fullName':
+              {
+                const parts = val.split(/\s+/);
+                item.firstName = parts.shift() || '';
+                item.lastName = parts.join(' ') || '';
+              }
+              break;
+            case 'birthDate':
+              {
+                // try to normalize common date formats to yyyy-mm-dd
+                const iso = parseDateToISO(val);
+                if (iso) {
+                  item.birthDate = iso;
+                } else {
+                  item.birthDate = val || '';
+                }
+              }
+              break;
+            case 'height':
+              item.height = val;
+              break;
+            case 'weight':
+              item.weight = val;
+              break;
+            case 'recordNumber':
+              item.recordNumber = val;
+              break;
+            case 'severity':
+              item.severity = normalizeSeverity(val);
+              break;
+            case 'labResults':
+              try {
+                item.labResults = JSON.stringify(JSON.parse(val));
+              } catch {
+                item.labResults = JSON.stringify({ notes: val });
+              }
+              break;
+            case 'doctorNotes':
+              item.doctorNotes = val;
+              break;
+            default:
+              // unknown header, ignores it
+              break;
+          }
+        }
+
+        // Default values for missing fields
+        if (!item.firstName && !item.lastName) {
+          item.firstName = 'Unknown';
+          item.lastName = 'Patient';
+        }
+        if (!item.recordNumber) {
+          item.recordNumber = `csv-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+        }
+        if (!item.height) item.height = '170 cm';
+        if (!item.weight) item.weight = '70 kg';
+        if (!item.labResults) item.labResults = JSON.stringify({});
+        if (!item.doctorNotes) item.doctorNotes = '';
+        if (!item.severity) item.severity = 'Stage 1';
+        if (!item.birthDate) item.birthDate = '';
+        toCreate.push(item);
+      }
+
+      if (toCreate.length === 0) {
+        toast({
+          title: 'No valid rows',
+          description: 'No valid patient rows found in CSV.',
+          variant: 'destructive',
+        });
+        setCsvUploading(false);
+        return;
+      }
+
+      let successCount = 0;
+      let failCount = 0;
+      for (const p of toCreate) {
+        try {
+          const response = await apiService.createPatient(p);
+          if (response.success && response.data) {
+            setPatients(prev => [...prev, response.data]);
+            successCount++;
+          } else {
+            failCount++;
+            console.error('Create patient failed response:', response);
+          }
+        } catch (err) {
+          failCount++;
+          console.error('Create patient error:', err);
+        }
+      }
+
+      toast({
+        title: 'CSV Upload Complete',
+        description: `Imported ${successCount} patients. ${failCount} failures.`,
+      });
+
+      setCsvFile(null);
+      setIsModalOpen(false);
     } catch (error) {
+      console.error('Error processing CSV:', error);
       toast({
         title: "Error",
         description: "Failed to read the CSV file.",
         variant: "destructive",
       });
+    } finally {
+      setCsvUploading(false);
     }
   };
 
@@ -213,81 +471,59 @@ const PatientList = () => {
                     Upload Patient
                   </Button>
                 </DialogTrigger>
-                <DialogContent className="sm:max-w-md">
+                <DialogContent className="w-full sm:max-w-4xl max-w-4xl">
                   <DialogHeader>
-                    <DialogTitle>Upload Patient</DialogTitle>
+                    <DialogTitle>Upload Patients CSV</DialogTitle>
                   </DialogHeader>
-                  <form onSubmit={handleQuickSubmit} className="space-y-4">
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <Label htmlFor="quick-firstName">First Name *</Label>
-                        <Input
-                          id="quick-firstName"
-                          placeholder="John"
-                          value={quickFormData.firstName}
-                          onChange={(e) => handleQuickFormChange('firstName', e.target.value)}
-                          required
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="quick-lastName">Last Name *</Label>
-                        <Input
-                          id="quick-lastName"
-                          placeholder="Smith"
-                          value={quickFormData.lastName}
-                          onChange={(e) => handleQuickFormChange('lastName', e.target.value)}
-                          required
-                        />
-                      </div>
-                    </div>
-                    
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <Label htmlFor="quick-recordNumber">Record Number *</Label>
-                        <Input
-                          id="quick-recordNumber"
-                          placeholder="P004"
-                          value={quickFormData.recordNumber}
-                          onChange={(e) => handleQuickFormChange('recordNumber', e.target.value)}
-                          required
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="quick-birthDate">Date of Birth *</Label>
-                        <Input
-                          id="quick-birthDate"
-                          type="date"
-                          value={quickFormData.birthDate}
-                          onChange={(e) => handleQuickFormChange('birthDate', e.target.value)}
-                          required
-                        />
-                      </div>
+
+                  <div className="space-y-4">
+                    <p className="text-sm text-muted-foreground">
+                      Upload a CSV file with patient rows. Supported headers (case-insensitive, common variants):
+                    </p>
+                    <code className="block bg-muted p-2 rounded text-xs">
+                      firstName,lastName,recordNumber,birthDate,height,weight,severity,labResults,doctorNotes
+                    </code>
+
+                    <div className="space-y-2 pt-2">
+                      <input
+                        type="file"
+                        accept=".csv,text/csv"
+                        ref={csvFileInputRef}
+                        onChange={handleCsvFileChange}
+                        className="block w-full text-sm text-muted-foreground file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-primary/10 file:text-primary hover:file:bg-primary/20"
+                      />
+
+                      {csvFile && (
+                        <div className="flex items-center justify-between mt-2">
+                          <div>
+                            <div className="text-sm font-medium">{csvFile.name}</div>
+                            <div className="text-xs text-muted-foreground">{(csvFile.size / 1024).toFixed(1)} KB</div>
+                          </div>
+                          <div className="flex items-center space-x-2">
+                            <Button variant="ghost" size="sm" onClick={() => setCsvFile(null)}>
+                              Remove
+                            </Button>
+                            <Button onClick={processCsvFile} disabled={csvUploading}>
+                              {csvUploading ? (
+                                <>
+                                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                  Uploading...
+                                </>
+                              ) : (
+                                'Upload'
+                              )}
+                            </Button>
+                          </div>
+                        </div>
+                      )}
                     </div>
 
-                    <div className="space-y-2">
-                      <Label htmlFor="quick-severity">Parkinson's Severity *</Label>
-                      <Select value={quickFormData.severity} onValueChange={(value) => handleQuickFormChange('severity', value)}>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select severity level" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="Mild">Mild</SelectItem>
-                          <SelectItem value="Moderate">Moderate</SelectItem>
-                          <SelectItem value="Severe">Severe</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-
-                    <div className="flex justify-end space-x-3 pt-4">
-                      <Button type="button" variant="outline" onClick={() => setIsModalOpen(false)}>
-                        Cancel
-                      </Button>
-                      <Button type="submit" className="bg-primary hover:bg-gradient-primary-hover">
-                        <UserPlus className="mr-2 h-4 w-4" />
-                        Add Patient
+                    <div className="flex justify-end">
+                      <Button variant="outline" onClick={() => setIsModalOpen(false)}>
+                        Close
                       </Button>
                     </div>
-                  </form>
+                  </div>
                 </DialogContent>
               </Dialog>
 
