@@ -124,36 +124,7 @@ def _patient_to_api_dict(session: Session, p: Patient) -> Dict[str, Any]:
             for v in visits
         ],
     }
-    vrepo = VisitRepository(session)
-    # ensure ascending by date; adjust if your repo already sorts
-    visits = sorted(vrepo.list(patient_id=p.patient_id),
-                    key=lambda v: v.visit_date or datetime.min)
-    latest = visits[-1] if visits else None
-
-    latest_lab = _to_dict(getattr(latest, "lab_result", None)) if latest else {}
-    severity = latest_lab.get("severity", "low")
-
-    return {
-        "patient_id": p.patient_id,
-        "name": p.name or "",
-        "birthDate": p.dob.isoformat() if p.dob else "",
-        "height": str(p.height) if p.height is not None else "0",
-        "weight": str(p.weight) if p.weight is not None else "0",
-        "doctors_notes": (latest.doctor_notes if latest else "") or "",
-        "severity": severity,
-        # ✅ add this to satisfy your response model
-        "lab_results": latest_lab or {},
-        # histories are always dicts/objects
-        "lab_results_history": [_to_dict(getattr(v, "lab_result", None)) for v in visits],
-        "doctors_notes_history": [
-            {
-                "note": v.doctor_notes or "",
-                "visit_id": v.visit_id,
-                "visit_date": v.visit_date.isoformat() if v.visit_date else None,
-            }
-            for v in visits
-        ],
-    }
+   
 # Legacy public API (same names/signatures)
 # =========================
 
@@ -310,17 +281,19 @@ def update_patient_info(patient_id: str, updated_data: Dict[str, Any]) -> Dict[s
             lab_input = updated_data.get("lab_results")
 
         lab_text = _extract_lab_result_value(lab_input)
-        notes_text = updated_data.get("doctors_notes") or ""
-
+        note_entry = None
+        notes_list = updated_data.get("doctors_notes")
+        note_entry = notes_list[0]["note"]
+               
         new_visit_needed = any(
-            k in updated_data for k in ("doctors_notes", "lab_result", "lab_results", "severity")
-        )
+                k in updated_data for k in ("doctors_notes", "lab_result", "lab_results", "severity")
+            )
 
         if new_visit_needed:
             visit = Visit(
                 patient_id=patient_id,
                 visit_date=datetime.utcnow(),
-                doctor_notes=notes_text,
+                doctor_notes=note_entry,
                 lab_result=lab_text,   # TEXT column; stores only the value
                 status="closed",
             )

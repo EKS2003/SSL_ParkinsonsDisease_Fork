@@ -1,0 +1,14 @@
+{
+  "testName": "finger-tapping",
+  "model": "hands",
+  "created_utc": "20251024T194626",
+  "session_id": "20251024T194626_0366c58c",
+  "live_len": 470,
+  "ref_len": 1246,
+  "dim": 42,
+  "distance": 131.69589624979466,
+  "avg_step_cost": 0.09222401698164892,
+  "similarity": 0.9119008453871976,
+  "patientId": "dusti1761333906",
+  "fps": 15.0
+}

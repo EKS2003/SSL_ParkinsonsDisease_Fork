@@ -129,7 +129,7 @@ const PatientDetails = () => {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          doctors_notes_history: [
+          doctors_notes: [
             {
               id: newEntry.id,
               date: toISO(newEntry.date),
