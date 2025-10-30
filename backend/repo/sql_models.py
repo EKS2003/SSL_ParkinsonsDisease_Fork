@@ -21,36 +21,46 @@ class Patient(Base):
 
     patient_id: Mapped[str] = mapped_column(String, primary_key=True)
     name: Mapped[Optional[str]] = mapped_column(String, nullable=True)
-    dob: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
+    dob: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)  # keep Date if you truly want date-only
     height: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     weight: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    severity: Mapped[Optional[str]] = mapped_column(String, nullable=True)
 
-    # Relationships
-    visits: Mapped[List["Visit"]] = relationship(
-        back_populates="patient",
-        cascade="all, delete-orphan",
-        passive_deletes=True,
+    # Correct relationships
+    labresults: Mapped[List["LabResult"]] = relationship(
+        "LabResult", back_populates="patient", cascade="all, delete-orphan", passive_deletes=True
+    )
+    doctornotes: Mapped[List["DoctorNote"]] = relationship(
+        "DoctorNote", back_populates="patient", cascade="all, delete-orphan", passive_deletes=True
     )
     testresults: Mapped[List["TestResult"]] = relationship(
-        back_populates="patient",
-        cascade="all, delete-orphan",
-        passive_deletes=True,
+        "TestResult", back_populates="patient", cascade="all, delete-orphan", passive_deletes=True
     )
 
-class Visit(Base):
-    __tablename__ = "visits"
+class LabResult(Base):
+    __tablename__ = "labresults"
 
-    visit_id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    lab_id: Mapped[int] = mapped_column(Integer, primary_key=True)
     patient_id: Mapped[str] = mapped_column(
         String, ForeignKey("patients.patient_id", ondelete="CASCADE"), nullable=False
     )
-    visit_date: Mapped[datetime] = mapped_column(DateTime, nullable=False)
-    lab_result: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    doctor_notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    status: Mapped[str] = mapped_column(String, default="closed")
+    result_date: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)  # was Date
+    results: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
-    # Reverse relationship to Patient
-    patient: Mapped["Patient"] = relationship(back_populates="visits")
+    patient: Mapped["Patient"] = relationship(back_populates="labresults")
+
+class DoctorNote(Base):
+    __tablename__ = "doctornotes"
+
+    note_id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    patient_id: Mapped[str] = mapped_column(
+        String, ForeignKey("patients.patient_id", ondelete="CASCADE"), nullable=False
+    )
+    note_date: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)  # was Date
+    note: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    added_by: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+
+    patient: Mapped["Patient"] = relationship(back_populates="doctornotes")
 
 class TestResult(Base):
     __tablename__ = "testresults"
@@ -60,8 +70,14 @@ class TestResult(Base):
         String, ForeignKey("patients.patient_id", ondelete="CASCADE"), nullable=False
     )
     test_type: Mapped[Optional[str]] = mapped_column(String, nullable=True)
-    test_date: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
+    test_date: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)  # was Date
     keypoints: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
-    # Reverse relationship to Patient
     patient: Mapped["Patient"] = relationship(back_populates="testresults")
+
+if __name__ == "__main__":
+    engine = create_engine("sqlite:///patients.db", echo=True)
+    Base.metadata.create_all(engine)
+    Session = sessionmaker(bind=engine)
+    session = Session()
+    print("✅ Tables created successfully!")

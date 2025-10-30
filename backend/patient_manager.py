@@ -11,13 +11,18 @@ from datetime import datetime
 from sqlalchemy.orm import Session
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, Session
+from fastapi import HTTPException as HttpException
 
 # --- your models & repos ---
-from repo.sql_models import Base, Patient  # Visit, TestResult defined there as well
+from repo.sql_models import Base, Patient, LabResult, DoctorNote  # Visit, TestResult defined there as well
 from repo.patient_repository import PatientRepository
-from repo.visit_repository import VisitRepository
 from repo.test_repository import TestResultRepository
-from repo.sql_models import Visit
+from routes.contracts import (
+    PatientCreate, PatientUpdate,
+    PatientResponse, PatientsListResponse,
+    PatientSearchResponse, FilterCriteria,
+    LabResultOut, DoctorNoteOut
+)
 
 # ----------------- DB bootstrap -----------------
 DB_URL = os.getenv("DB_URL", "sqlite:///./app.db")
@@ -76,68 +81,46 @@ def _validate(data: Dict[str, Any]) -> Dict[str, str]:
 
     return errors
 
-def _to_dict(obj: Any) -> Dict[str, Any]:
-    if obj is None:
-        return {}
-    if isinstance(obj, dict):
-        return obj
-    if isinstance(obj, str):
-        try:
-            parsed = json.loads(obj)
-            return parsed if isinstance(parsed, dict) else {"value": parsed}
-        except Exception:
-            return {"value": obj}
-    return {"value": obj}
+def _iso(dt: Optional[datetime | date]) -> Optional[str]:
+    if not dt: return None
+    # datetime/date both have isoformat()
+    return dt.isoformat()
 
 def _patient_to_api_dict(session: Session, p: Patient) -> Dict[str, Any]:
-    vrepo = VisitRepository(session)
-    visits = sorted(vrepo.list(patient_id=p.patient_id), key=lambda v: v.visit_date or datetime.min)
-    latest = visits[-1] if visits else None
+    prepo = PatientRepository(session)
+    labs = sorted(prepo.list_lab_results(p.patient_id), key=lambda r: (r.result_date or date.min, r.lab_id))
+    notes = sorted(prepo.list_doctor_notes(p.patient_id), key=lambda n: (n.note_date or date.min, n.note_id))
 
-    latest_lab = _to_dict(getattr(latest, "lab_result", None)) if latest else {}
-    severity = latest_lab.get("severity", "low")
+    latest_lr = LabResultOut.model_validate(labs[-1]) if labs else None
+    latest_dn = DoctorNoteOut.model_validate(notes[-1]) if notes else None
 
     return {
         "patient_id": p.patient_id,
         "name": p.name or "",
         "birthDate": p.dob.isoformat() if p.dob else "",
-        "height": str(p.height) if p.height is not None else "0",
-        "weight": str(p.weight) if p.weight is not None else "0",
-        "doctors_notes": (latest.doctor_notes if latest else "") or "",
-        "severity": severity,
-        "lab_results": latest_lab or {},
-        # include visit_id + visit_date so the UI can key + date correctly
-        "lab_results_history": [
-            {
-                "visit_id": v.visit_id,
-                "visit_date": v.visit_date.isoformat() if v.visit_date else None,
-                **_to_dict(getattr(v, "lab_result", None)),
-            }
-            for v in visits
-        ],
-        "doctors_notes_history": [
-            {
-                "note": v.doctor_notes or "",
-                "visit_id": v.visit_id,
-                "visit_date": v.visit_date.isoformat() if v.visit_date else None,
-            }
-            for v in visits
-        ],
+        "height": str(p.height or 0),
+        "weight": str(p.weight or 0),
+        "doctors_notes": latest_dn,
+        "severity": p.severity or "",
+        "lab_results": latest_lr,
+        "lab_results_history": [LabResultOut.model_validate(x) for x in labs],
+        "doctors_notes_history": [DoctorNoteOut.model_validate(x) for x in notes],
     }
-   
 # Legacy public API (same names/signatures)
 # =========================
+
+from datetime import date, datetime
+from typing import Union, Dict, Any, Optional
 
 def create_patient(
     name: str,
     birthDate: Union[str, date],
     height: Optional[float],
     weight: Optional[float],
-    lab_results: str,
+    lab_results: Optional[str],
     doctors_notes: str,
     severity: str,
 ) -> Dict[str, Any]:
-    # Validate basic inputs (reuses your helper)
     errs = _validate({
         "name": name,
         "birthDate": birthDate,
@@ -148,7 +131,6 @@ def create_patient(
     if errs:
         return {"success": False, "errors": errs}
 
-    # Coerce types
     try:
         dob = birthDate if isinstance(birthDate, date) else date.fromisoformat(str(birthDate))
     except Exception:
@@ -157,53 +139,42 @@ def create_patient(
     h = _parse_number(height, 0, 300)
     w = _parse_number(weight, 0, 500)
 
-    # Ensure lab_results is a dict
-    if not isinstance(lab_results, dict):
-        try:
-            import json
-            parsed = json.loads(str(lab_results))
-            lab_results = parsed if isinstance(parsed, dict) else {"value": parsed}
-        except Exception:
-            lab_results = {"value": lab_results}
+    # coerce lab_results to a plain string value
 
     patient_id = _gen_patient_id(name)
 
     try:
         with SessionLocal() as session:
             prepo = PatientRepository(session)
-            vrepo = VisitRepository(session)
 
-            # Create patient row
             dbp = Patient(
                 patient_id=patient_id,
                 name=name,
                 dob=dob,
                 height=int(h) if h is not None else None,
                 weight=int(w) if w is not None else None,
+                severity=severity,
             )
-            prepo.add(dbp)  # commits
+            prepo.add(dbp)
 
-            # First visit snapshot to carry legacy fields
-            raw_result = lab_results
-            if isinstance(lab_results, dict):
-                # Only keep the 'value' key if present
-                raw_result = lab_results.get("value", str(lab_results))
-            elif not isinstance(lab_results, str):
-                raw_result = str(lab_results)
-
-            visit = Visit(
+            # first lab + first note rows
+            prepo.add_lab_result(
                 patient_id=patient_id,
-                visit_date=datetime.utcnow(),
-                doctor_notes=doctors_notes or "",
-                lab_result=raw_result,   
-                status="closed",
+                result_date=datetime.now(),  # was datetime.date()
+                results=lab_results,
             )
-            vrepo.add(visit)
+
+            prepo.add_doctor_note(
+                patient_id=patient_id,
+                note_date=datetime.now(),
+                note=doctors_notes,
+                added_by="system",
+            )
 
             return {"success": True, "patient_id": patient_id}
     except Exception as e:
-        # Surface DB/repo errors back to the caller rather than returning None
         return {"success": False, "error": str(e)}
+
 
 def get_patient_info(patient_id: str) -> Dict[str, Any]:
     with SessionLocal() as session:
@@ -245,7 +216,6 @@ def update_patient_info(patient_id: str, updated_data: Dict[str, Any]) -> Dict[s
 
     with SessionLocal() as session:
         prepo = PatientRepository(session)
-        vrepo = VisitRepository(session)
 
         dbp = prepo.get(patient_id)
         if not dbp:
@@ -276,33 +246,24 @@ def update_patient_info(patient_id: str, updated_data: Dict[str, Any]) -> Dict[s
 
         # --- New Visit snapshot if any visit-scoped fields provided ---
         # Accept either 'lab_result' or 'lab_results' from caller
-        lab_input = updated_data.get("lab_result")
-        if lab_input is None:
-            lab_input = updated_data.get("lab_results")
-
-        lab_text = _extract_lab_result_value(lab_input)
-        note_entry = None
-        notes_list = updated_data.get("doctors_notes")
-        note_entry = notes_list[0]["note"]
-               
-        new_visit_needed = any(
-                k in updated_data for k in ("doctors_notes", "lab_result", "lab_results", "severity")
-            )
-
-        if new_visit_needed:
-            visit = Visit(
+        lab_input = updated_data.get("lab_results")
+        if lab_input is not None:
+            lab_input = _extract_lab_result_value(lab_input)
+            prepo.add_lab_result(
                 patient_id=patient_id,
-                visit_date=datetime.utcnow(),
-                doctor_notes=note_entry,
-                lab_result=lab_text,   # TEXT column; stores only the value
-                status="closed",
+                result_date=datetime.now(),
+                results= lab_input)
+            
+        if "doctors_notes" in updated_data:
+            prepo.add_doctor_note(
+                patient_id=patient_id,
+                note_date=datetime.now(),
+                note=updated_data["doctors_notes"][0]["note"],
+                added_by="system",
             )
-            # If your repo takes a model instance:
-            vrepo.add(visit)
-            # If instead your repo expects kwargs, switch to:
-            # vrepo.add(patient_id=patient_id, visit_date=datetime.utcnow(),
-            #           doctor_notes=notes_text, lab_result=lab_text, status="closed")
 
+
+        
         return {"success": True, "patient_id": patient_id}
 
 def delete_patient_record(patient_id: str) -> Dict[str, Any]:
@@ -346,16 +307,7 @@ def filter_patients(criteria: Dict[str, Any]) -> Dict[str, Any]:
                 q = criteria["name"].lower()
                 rows = [p for p in rows if (p.name or "").lower().find(q) >= 0]
 
-            # severity filter using latest visit
-            sev = criteria.get("severity")
-            if sev is not None:
-                vrepo = VisitRepository(session)
-                keep: List[Patient] = []
-                for p in rows:
-                    latest = vrepo.latest_visit(p.patient_id)
-                    if latest and latest.vitals_json and latest.vitals_json.get("severity") == sev:
-                        keep.append(p)
-                rows = keep
+
 
         return {"success": True, "patients": [_patient_to_api_dict(session, r) for r in rows], "count": len(rows)}
 

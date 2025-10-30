@@ -1,10 +1,10 @@
 from fastapi import APIRouter, Depends, Query, HTTPException
 
-from datetime import date
 from typing import List, Optional, Dict, Any, Union
 from pydantic import BaseModel, Field, field_validator
 import json, re
-
+from datetime import datetime, date
+from pydantic import ConfigDict  # v2
 
 from patient_manager import (
     async_create_patient, async_get_patient_info,
@@ -13,116 +13,29 @@ from patient_manager import (
     async_filter_patients,
 )
 
+from routes.contracts import (
+    PatientCreate, PatientUpdate,
+    PatientResponse, PatientsListResponse,
+    PatientSearchResponse, FilterCriteria,
+    LabResultOut, DoctorNoteOut
+)
+
 _num = re.compile(r"(\d+\.?\d*)")
 # Accept low/medium/high OR Stage 1..5
 
-class PatientCreate(BaseModel):
-    name: str
-    birthDate: date                                      # <-- use birthDate not age
-    height: Optional[Union[float, str]] = None
-    weight: Optional[Union[float, str]] = None
-    lab_results: Union[str, Dict[str, Any]] = Field(default_factory=dict)    
-    doctors_notes: Optional[str] = ""
-    severity: str
-
-    @field_validator("height", "weight", mode="before")
-    @classmethod
-    def _to_float(cls, v):
-        if v is None:
-            return None
-        if isinstance(v, (int, float)):
-            return float(v)
-        m = _num.search(str(v))
-        return float(m.group(1)) if m else None
-
-    @field_validator("lab_results", mode="before")
-    @classmethod
-    def coerce_lab_results(cls, v):
-        if v is None: return {}
-        if isinstance(v, dict): return v
-        if isinstance(v, str):
-            import json
-            try:
-                parsed = json.loads(v)
-                return parsed if isinstance(parsed, dict) else {"value": parsed}
-            except Exception:
-                return {"value": v}
-        return {"value": v}
-
-class PatientUpdate(BaseModel):
-    name: Optional[str] = None
-    birthDate: Optional[date] = None                     # <-- keep birthDate for updates too
-    height: Optional[Union[float, str]] = None
-    weight: Optional[Union[float, str]] = None
-    lab_results: Union[str, Dict[str, Any]] = Field(default_factory=dict)    
-    doctors_notes: Optional[List[Dict[str, Any]]] = None
-    severity: Optional[str] = None
-
-    @field_validator("height", "weight", mode="before")
-    @classmethod
-    def _to_float(cls, v):
-        if v is None:
-            return None
-        if isinstance(v, (int, float)):
-            return float(v)
-        m = _num.search(str(v))
-        return float(m.group(1)) if m else None
-
-    @field_validator("lab_results", mode="before")
-    @classmethod
-    def _to_dict(cls, v):
-        if v in (None, ""):
-            return None
-        if isinstance(v, dict):
-            return v
-        try:
-            parsed = json.loads(str(v))
-            return parsed if isinstance(parsed, dict) else {"value": parsed}
-        except Exception:
-            return {"value": v}
-
-class PatientResponse(BaseModel):
-    patient_id: str
-    name: str
-    birthDate: str
-    height: str
-    weight: str
-    doctors_notes: str
-    severity: str
-    lab_results: Dict[str, Any] = Field(default_factory=dict)
-    lab_results_history: List[Dict[str, Any]] = Field(default_factory=list)   # <-- add
-    doctors_notes_history: List[Dict[str, Any]] = Field(default_factory=list)
-
-
-class PatientsListResponse(BaseModel):
-    success: bool
-    patients: List[PatientResponse]
-    total: int
-    skip: int
-    limit: int
-
-class PatientSearchResponse(BaseModel):
-    success: bool
-    patients: List[PatientResponse]
-    count: int
-
-class FilterCriteria(BaseModel):
-    # Keep age filters if you want; you’ll compute DOB cutoffs server-side
-    min_age: Optional[int] = None
-    max_age: Optional[int] = None
-    severity: Optional[str] 
 
 router = APIRouter(prefix="/patients")
 
 
 @router.post("/", response_model=Dict)
 async def create_patient(patient: PatientCreate):
+    
     result = await async_create_patient(
         name=patient.name,
         birthDate=patient.birthDate,
         height=patient.height,
         weight=patient.weight,
-        lab_results=patient.lab_results or {},
+        lab_results=patient.lab_results or "",
         doctors_notes=patient.doctors_notes or "",
         severity=patient.severity,
     )
@@ -155,7 +68,7 @@ async def update_patient(patient_id: str, patient_update: PatientUpdate):
         update_data.pop("lab_results")
     if not update_data:
         return {"success": True, "patient_id": patient_id}  # no-op instead of 400
-
+    
     result = await async_update_patient_info(patient_id, update_data)
     if not result.get("success"):
         if "errors" in result:

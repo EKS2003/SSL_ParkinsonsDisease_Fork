@@ -71,7 +71,7 @@ const convertBackendToFrontend = (backendPatient: BackendPatient) => {
     birthDate: backendPatient.birthDate || "",
     height: `${backendPatient.height || 0} cm`,
     weight: `${backendPatient.weight || 0} kg`,
-    labResults: JSON.stringify(backendPatient.lab_results || {}),
+    labResults: backendPatient.lab_results,
     doctorNotes: backendPatient.doctors_notes || "",
     labResultsHistory: (backendPatient.lab_results_history || []).map(
       (entry) => ({
@@ -109,8 +109,8 @@ const convertFrontendToBackend = (
   return {
     name: fullName,
     birthDate: frontendPatient.birthDate,
-    height: heightStr || "0", 
-    weight: weightStr || "0", 
+    height: heightStr || "0",
+    weight: weightStr || "0",
     lab_results: frontendPatient.labResults,
     doctors_notes: frontendPatient.doctorNotes || "",
     severity: frontendPatient.severity,

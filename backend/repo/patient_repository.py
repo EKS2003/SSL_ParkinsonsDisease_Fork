@@ -6,7 +6,7 @@ from datetime import date, datetime, timedelta
 from sqlalchemy import func, select, and_, desc
 from sqlalchemy.orm import Session
 
-from repo.sql_models import Patient, Visit, TestResult
+from repo.sql_models import Patient, LabResult, DoctorNote, TestResult
 
 # Optional: align with your existing schema types if you have them
 # from schema.patient_schema import PatientSearchResponse, FilterCriteria
@@ -56,42 +56,54 @@ class PatientRepository:
     def count(self) -> int:
         return self.session.query(Patient).count()
 
-    # ---------------- Visits ----------------
-    def add_visit(
+    #----------------- Add Lab Results & Doctor Notes ----------------
+    def add_lab_result(
         self,
         patient_id: str,
-        doctor_notes: Optional[str] = None,
-        progression_note: Optional[str] = None,
-        vitals_json: Optional[Dict[str, Any]] = None,
-        status: str = "closed",
-        visit_date: Optional[datetime] = None,
-    ) -> Visit:
-        v = Visit(
+        result_date: date | None,
+        results: str | None,
+    ) -> LabResult:
+        lr = LabResult(
             patient_id=patient_id,
-            visit_date=visit_date or datetime.utcnow(),
-            doctor_notes=doctor_notes,
-            progression_note=progression_note,
-            vitals_json=vitals_json,
-            status=status,
+            result_date=result_date,
+            results=results,
         )
-        self.session.add(v)
+        self.session.add(lr)
         self.session.commit()
-        return v
-
-    def list_visits(self, patient_id: str) -> List[Visit]:
+        self.session.refresh(lr)
+        return lr
+    
+    def list_lab_results(self, patient_id: str) -> List[LabResult]:
         return (
-            self.session.query(Visit)
-            .filter(Visit.patient_id == patient_id)
-            .order_by(Visit.visit_date.asc())
+            self.session.query(LabResult)
+            .filter(LabResult.patient_id == patient_id)
+            .order_by(LabResult.result_date.asc().nulls_last())
             .all()
         )
-
-    def latest_visit(self, patient_id: str) -> Optional[Visit]:
+    
+    def add_doctor_note(
+        self,
+        patient_id: str,
+        note_date: Optional[date],
+        note: Optional[str],
+        added_by: Optional[str],
+    ) -> DoctorNote:
+        doc_note = DoctorNote(
+            patient_id=patient_id,
+            note_date=note_date,
+            note=note,
+            added_by=added_by,
+        )
+        self.session.add(doc_note)
+        self.session.commit()
+        return doc_note
+    
+    def list_doctor_notes(self, patient_id: str) -> List[DoctorNote]:
         return (
-            self.session.query(Visit)
-            .filter(Visit.patient_id == patient_id)
-            .order_by(Visit.visit_date.desc())
-            .first()
+            self.session.query(DoctorNote)
+            .filter(DoctorNote.patient_id == patient_id)
+            .order_by(DoctorNote.note_date.asc().nulls_last())
+            .all()
         )
 
     # ---------------- Test Results ----------------
