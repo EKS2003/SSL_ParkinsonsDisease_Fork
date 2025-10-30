@@ -29,6 +29,7 @@ dist-ssr
 *.mp4
 *.mov
 *.avi
+*.npz
 =======
 /backend/__pycache__
 >>>>>>> Stashed changes
