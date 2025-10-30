@@ -1,14 +1,30 @@
+export interface LabResultEntry {
+  id: string;
+  date: Date;
+  results: string;
+  addedBy?: string;
+}
+
+export interface DoctorNoteEntry {
+  id: string;
+  date: Date;
+  note: string;
+  addedBy?: string;
+}
+
 export interface Patient {
   id: string;
   firstName: string;
   lastName: string;
   recordNumber: string;
-  age: number;
+  birthDate: string;
   height: string;
   weight: string;
-  labResults: string;
-  doctorNotes: string;
-  severity: 'Mild' | 'Moderate' | 'Severe';
+  labResults: string; // Keep for backward compatibility
+  doctorNotes: string; // Keep for backward compatibility
+  labResultsHistory?: LabResultEntry[];
+  doctorNotesHistory?: DoctorNoteEntry[];
+  severity: 'Stage 1' | 'Stage 2' | 'Stage 3' | 'Stage 4' | 'Stage 5';
   createdAt: Date;
   updatedAt: Date;
 }

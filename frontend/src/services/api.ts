@@ -1,20 +1,33 @@
+
 const API_BASE_URL = 'http://localhost:8000';
 
 // Types for backend API
 interface BackendPatient {
   patient_id: string;
   name: string;
-  age: number;
+  birthDate: string;
   height: number;
   weight: number;
   lab_results: Record<string, any>;
   doctors_notes: string;
   severity: string;
+  lab_results_history?: Array<{
+    id: string;
+    date: string;
+    results: string;
+    added_by: string;
+  }>;
+  doctors_notes_history?: Array<{
+    id: string;
+    date: string;
+    note: string;
+    added_by: string;
+  }>;
 }
 
 interface BackendPatientCreate {
   name: string;
-  age: number;
+  birthDate: string;
   height: string;
   weight: string;
   lab_results?: Record<string, any>;
@@ -24,7 +37,7 @@ interface BackendPatientCreate {
 
 interface BackendPatientUpdate {
   name?: string;
-  age?: number;
+  birthDate?: string;
   height?: string;
   weight?: string;
   lab_results?: Record<string, any>;
@@ -46,16 +59,33 @@ const convertBackendToFrontend = (backendPatient: BackendPatient) => {
   const firstName = nameParts[0] || '';
   const lastName = nameParts.slice(1).join(' ') || '';
   
+  // Debug logging (commented out)
+  // console.log('Converting backend patient:', backendPatient.patient_id);
+  // console.log('Doctor notes history:', backendPatient.doctors_notes_history);
+  // console.log('Legacy doctor notes:', backendPatient.doctors_notes);
+  
   return {
     id: backendPatient.patient_id || '',
     firstName,
     lastName,
     recordNumber: backendPatient.patient_id || '', // Using patient_id as record number
-    age: backendPatient.age || 0,
+    birthDate: backendPatient.birthDate || '',
     height: `${backendPatient.height || 0} cm`,
     weight: `${backendPatient.weight || 0} kg`,
     labResults: JSON.stringify(backendPatient.lab_results || {}),
     doctorNotes: backendPatient.doctors_notes || '',
+    labResultsHistory: (backendPatient.lab_results_history || []).map(entry => ({
+      id: entry.id,
+      date: new Date(entry.date),
+      results: entry.results,
+      addedBy: entry.added_by
+    })),
+    doctorNotesHistory: (backendPatient.doctors_notes_history || []).map(entry => ({
+      id: entry.id,
+      date: new Date(entry.date),
+      note: entry.note,
+      addedBy: entry.added_by
+    })),
     severity: mapSeverity(backendPatient.severity || 'low'),
     createdAt: new Date(), // Backend doesn't provide this, using current date
     updatedAt: new Date(), // Backend doesn't provide this, using current date
@@ -71,7 +101,7 @@ const convertFrontendToBackend = (frontendPatient: any): BackendPatientCreate =>
   
   return {
     name: fullName,
-    age: frontendPatient.age,
+    birthDate: frontendPatient.birthDate,
     height: heightStr || '0', // Keep as string for create endpoint
     weight: weightStr || '0', // Keep as string for create endpoint
     lab_results: frontendPatient.labResults ? JSON.parse(frontendPatient.labResults) : {},
@@ -81,30 +111,48 @@ const convertFrontendToBackend = (frontendPatient: any): BackendPatientCreate =>
 };
 
 // Map severity from backend to frontend
-const mapSeverity = (backendSeverity: string): 'Mild' | 'Moderate' | 'Severe' => {
+export const mapSeverity = (backendSeverity: string): 'Stage 1' | 'Stage 2' | 'Stage 3' | 'Stage 4' | 'Stage 5' => {
   switch (backendSeverity.toLowerCase()) {
-    case 'low':
-      return 'Mild';
+    case 'mild':
+      return 'Stage 1';
     case 'medium':
-      return 'Moderate';
+      return 'Stage 2';
+    case 'severe':
+      return 'Stage 4';
+    case 'low':
+      return 'Stage 1';
     case 'high':
-      return 'Severe';
+      return 'Stage 5';
+    case 'stage 1':
+      return 'Stage 1';
+    case 'stage 2':
+      return 'Stage 2';
+    case 'stage 3':
+      return 'Stage 3';
+    case 'stage 4':
+      return 'Stage 4';
+    case 'stage 5':
+      return 'Stage 5';
     default:
-      return 'Mild';
+      return 'Stage 1';
   }
 };
 
 // Map severity from frontend to backend
 const mapSeverityToBackend = (frontendSeverity: string): string => {
   switch (frontendSeverity) {
-    case 'Mild':
-      return 'low';
-    case 'Moderate':
+    case 'Stage 1':
+      return 'mild';
+    case 'Stage 2':
       return 'medium';
-    case 'Severe':
-      return 'high';
+    case 'Stage 3':
+      return 'medium';
+    case 'Stage 4':
+      return 'severe';
+    case 'Stage 5':
+      return 'severe';
     default:
-      return 'low';
+      return 'mild';
   }
 };
 
@@ -227,7 +275,7 @@ class ApiService {
       backendData.name = fullName;
     }
     
-    if (updateData.age !== undefined) backendData.age = updateData.age;
+    if (updateData.age !== undefined) backendData.birthDate = updateData.age;
     if (updateData.height) {
       const heightStr = updateData.height.replace(/[^\d.]/g, '');
       backendData.height = heightStr || '0';
@@ -254,7 +302,7 @@ class ApiService {
             console.log('Backend update data:', backendData);
         console.log('Data types:', {
           name: typeof backendData.name,
-          age: typeof backendData.age,
+          age: typeof backendData.birthDate,
           height: typeof backendData.height,
           weight: typeof backendData.weight,
           severity: typeof backendData.severity
