@@ -592,5 +592,17 @@
     "severity": "mild",
     "lab_results_history": [],
     "doctors_notes_history": []
+  },
+  "chris1761840689": {
+    "patient_id": "chris1761840689",
+    "name": "Christophe Bobda",
+    "birthDate": "01/01/1980",
+    "height": "61.0",
+    "weight": "190.0",
+    "lab_results": {},
+    "doctors_notes": "",
+    "severity": "low",
+    "lab_results_history": [],
+    "doctors_notes_history": []
   }
 }

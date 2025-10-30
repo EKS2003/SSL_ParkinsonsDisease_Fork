@@ -65,13 +65,16 @@ app.add_middleware(
         "http://localhost:8000",
         "http://localhost:8080",
         "http://localhost:5173",
+        "http://localhost:5174",  # Add this line
         "http://localhost:3000",
         "http://127.0.0.1:8000",
         "http://127.0.0.1:8080",
         "http://127.0.0.1:5173",
+        "http://127.0.0.1:5174",  # Add this line too
         "http://127.0.0.1:3000",
-        "http://localhost:5174"
-    ],  # Adjust this in production to your frontend's URL
+        "http://localhost:8001",
+        "http://localhost:8000/patients",
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -80,7 +83,8 @@ app.add_middleware(
 # ============ Models ============
 class PatientCreate(BaseModel):
     name: str
-    age: int = Field(..., ge=0, le=120)
+    # age: int = Field(..., ge=0, le=120)
+    birthDate: str  # Add this line
     height: str = Field(..., min_length=1)
     weight: str = Field(..., min_length=1)
     lab_results: Optional[Dict] = Field(default_factory=dict)
@@ -89,7 +93,7 @@ class PatientCreate(BaseModel):
 
 class PatientUpdate(BaseModel):
     name: Optional[str] = None
-    age: Optional[int] = Field(None, ge=0, le=120)
+    # age: Optional[int] = Field(None, ge=0, le=120)
     birthDate: Optional[str] = None
     height: Optional[str] = None
     weight: Optional[str] = None
@@ -396,6 +400,7 @@ async def create_patient(patient: PatientCreate):
     doctors_notes = patient.doctors_notes if patient.doctors_notes is not None else ""
     result = await async_create_patient(
         name=patient.name,
+        # age=patient.age,  # Add this line
         birthDate=patient.birthDate,
         height=height,
         weight=weight,

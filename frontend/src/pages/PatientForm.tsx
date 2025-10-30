@@ -50,7 +50,7 @@ const PatientForm = () => {
           firstName: patient.firstName,
           lastName: patient.lastName,
           recordNumber: patient.recordNumber,
-          birthDate: patient.age.toString(),
+          birthDate: patient.birthDate.toString(),
           height: patient.height,
           weight: patient.weight,
           labResults: patient.labResults,
@@ -209,13 +209,13 @@ const PatientForm = () => {
                   </div>
 
                   <div className="space-y-2">
-                    <Label htmlFor="age">Age *</Label>
+                    <Label htmlFor="birthDate">Birthdate *</Label>
                     <Input
-                      id="age"
-                      type="number"
-                      placeholder="Enter age"
+                      id="birthDate"
+                      type="calendar"
+                      placeholder="Enter birthdate"
                       value={formData.birthDate}
-                      onChange={(e) => handleInputChange('age', e.target.value)}
+                      onChange={(e) => handleInputChange('birthDate', e.target.value)}
                       required
                     />
                   </div>

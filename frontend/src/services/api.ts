@@ -1,5 +1,20 @@
+const API_BASE_URL = 'http://localhost:8000'; //not using docker if you are swich back to 8000
 
-const API_BASE_URL = 'http://localhost:8000';
+//remove later
+const calculateAge = (birthDate: string): number => {
+  if (!birthDate) return 0;
+  
+  const birth = new Date(birthDate);
+  const today = new Date();
+  let age = today.getFullYear() - birth.getFullYear();
+  const monthDiff = today.getMonth() - birth.getMonth();
+  
+  if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birth.getDate())) {
+    age--;
+  }
+  
+  return Math.max(0, age);
+};
 
 // Types for backend API
 interface BackendPatient {
@@ -27,6 +42,7 @@ interface BackendPatient {
 
 interface BackendPatientCreate {
   name: string;
+  age: number;
   birthDate: string;
   height: string;
   weight: string;
@@ -37,6 +53,7 @@ interface BackendPatientCreate {
 
 interface BackendPatientUpdate {
   name?: string;
+  age?: number;
   birthDate?: string;
   height?: string;
   weight?: string;
@@ -101,9 +118,10 @@ const convertFrontendToBackend = (frontendPatient: any): BackendPatientCreate =>
   
   return {
     name: fullName,
+    age: calculateAge(frontendPatient.birthDate), // Use your existing function
     birthDate: frontendPatient.birthDate,
-    height: heightStr || '0', // Keep as string for create endpoint
-    weight: weightStr || '0', // Keep as string for create endpoint
+    height: heightStr || '0',
+    weight: weightStr || '0',
     lab_results: frontendPatient.labResults ? JSON.parse(frontendPatient.labResults) : {},
     doctors_notes: frontendPatient.doctorNotes || '',
     severity: mapSeverityToBackend(frontendPatient.severity),
@@ -113,16 +131,6 @@ const convertFrontendToBackend = (frontendPatient: any): BackendPatientCreate =>
 // Map severity from backend to frontend
 export const mapSeverity = (backendSeverity: string): 'Stage 1' | 'Stage 2' | 'Stage 3' | 'Stage 4' | 'Stage 5' => {
   switch (backendSeverity.toLowerCase()) {
-    case 'mild':
-      return 'Stage 1';
-    case 'medium':
-      return 'Stage 2';
-    case 'severe':
-      return 'Stage 4';
-    case 'low':
-      return 'Stage 1';
-    case 'high':
-      return 'Stage 5';
     case 'stage 1':
       return 'Stage 1';
     case 'stage 2':
@@ -142,17 +150,17 @@ export const mapSeverity = (backendSeverity: string): 'Stage 1' | 'Stage 2' | 'S
 const mapSeverityToBackend = (frontendSeverity: string): string => {
   switch (frontendSeverity) {
     case 'Stage 1':
-      return 'mild';
+      return 'low';
     case 'Stage 2':
       return 'medium';
     case 'Stage 3':
       return 'medium';
     case 'Stage 4':
-      return 'severe';
+      return 'high';
     case 'Stage 5':
-      return 'severe';
+      return 'high';
     default:
-      return 'mild';
+      return 'low';
   }
 };
 
@@ -275,7 +283,11 @@ class ApiService {
       backendData.name = fullName;
     }
     
-    if (updateData.age !== undefined) backendData.birthDate = updateData.age;
+    if (updateData.birthDate !== undefined) {
+      backendData.birthDate = updateData.birthDate;
+      backendData.age = calculateAge(updateData.birthDate); // Use your existing function
+    }
+    
     if (updateData.height) {
       const heightStr = updateData.height.replace(/[^\d.]/g, '');
       backendData.height = heightStr || '0';
@@ -302,7 +314,7 @@ class ApiService {
             console.log('Backend update data:', backendData);
         console.log('Data types:', {
           name: typeof backendData.name,
-          age: typeof backendData.birthDate,
+          birthDate: typeof backendData.birthDate,
           height: typeof backendData.height,
           weight: typeof backendData.weight,
           severity: typeof backendData.severity
@@ -372,7 +384,7 @@ class ApiService {
 
   // Get test history for a patient
   async getPatientTests(patientId: string): Promise<ApiResponse<any[]>> {
-    const response = await this.request<{ tests: any[] }>(`/patients/${patientId}/tests`);
+    const response = await this.request<{ tests: any }>(`/patients/${patientId}/tests`);
     if (response.success && response.data) {
       // Optionally, map/convert test data here
       return { success: true, data: response.data.tests };
@@ -393,4 +405,4 @@ class ApiService {
 
 // Export singleton instance
 export const apiService = new ApiService();
-export default apiService; 
+export default apiService;

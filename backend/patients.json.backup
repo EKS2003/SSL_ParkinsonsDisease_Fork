@@ -24,16 +24,22 @@
     ],
     "doctors_notes_history": [
       {
-        "date": "2025-09-20T09:15:00Z",
-        "added_by": "Dr. Smith",
         "id": "note_1",
-        "note": "Patient shows improvement with current medication. Tremor reduced significantly."
+        "date": "2025-09-20T09:15:00.000Z",
+        "note": "Patient shows improvement with current medication. Tremor reduced significantly.",
+        "added_by": "Dr. Smith"
       },
       {
-        "date": "2025-08-15T16:45:00Z",
-        "added_by": "Dr. Johnson",
         "id": "note_2",
-        "note": "Started on new L-DOPA regimen. Monitor for side effects."
+        "date": "2025-08-15T16:45:00.000Z",
+        "note": "Started on new L-DOPA regimen. Monitor for side effects.",
+        "added_by": "Dr. Johnson"
+      },
+      {
+        "id": "note_1759507545239",
+        "date": "2025-10-03T16:05:45.239Z",
+        "note": "Testing",
+        "added_by": "Current User"
       }
     ]
   },
