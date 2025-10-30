@@ -11,7 +11,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
 import { Patient, DoctorNoteEntry } from '@/types/patient';
-import apiService from '@/services/api';
+import apiService, { normalizeBirthDate } from '@/services/api';
 import { useApiStatus } from '@/hooks/use-api-status';
 import { getSeverityColor, calculateAge } from '@/lib/utils';
 
@@ -72,6 +72,11 @@ const PatientList = () => {
   );
 
   const handleQuickFormChange = (field: string, value: string) => {
+    if (field === 'birthDate') {
+      const normalized = normalizeBirthDate(value);
+      setQuickFormData(prev => ({ ...prev, [field]: normalized || value }));
+      return;
+    }
     setQuickFormData(prev => ({ ...prev, [field]: value }));
   };
 
@@ -88,12 +93,22 @@ const PatientList = () => {
       return;
     }
 
+    const normalizedBirthDate = normalizeBirthDate(quickFormData.birthDate);
+    if (!normalizedBirthDate) {
+      toast({
+        title: "Invalid Birthdate",
+        description: "Enter a valid date (e.g., 1980-05-12).",
+        variant: "destructive",
+      });
+      return;
+    }
+
     // Create new patient data
     const newPatientData = {
       firstName: quickFormData.firstName,
       lastName: quickFormData.lastName,
       recordNumber: quickFormData.recordNumber,
-      birthDate: quickFormData.birthDate,
+      birthDate: normalizedBirthDate,
       height: '170 cm', // Default values for quick add
       weight: '70 kg',
       labResults: '{}',
@@ -227,9 +242,11 @@ const PatientList = () => {
                           <SelectValue placeholder="Select severity level" />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="Mild">Mild</SelectItem>
-                          <SelectItem value="Moderate">Moderate</SelectItem>
-                          <SelectItem value="Severe">Severe</SelectItem>
+                          <SelectItem value="Stage 1">Stage 1</SelectItem>
+                          <SelectItem value="Stage 2">Stage 2</SelectItem>
+                          <SelectItem value="Stage 3">Stage 3</SelectItem>
+                          <SelectItem value="Stage 4">Stage 4</SelectItem>
+                          <SelectItem value="Stage 5">Stage 5</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>
