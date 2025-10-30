@@ -34,7 +34,7 @@ const modelForTest = (testId?: string) => {
   }
 };
 
-const MIN_RECORDING_TIME = 35; // seconds
+const MIN_RECORDING_TIME = 12; // seconds
 
 const VideoRecording = () => {
   const { id, testId } = useParams<{ id: string; testId: string }>();
@@ -101,7 +101,43 @@ const VideoRecording = () => {
       }
     })();
     return () => {
-      if (rafRef.current) cancelAnimationFrame(rafRef.current);
+      stopFrameLoop();
+
+      if (wsRef.current) {
+        wsRef.current.onopen = null;
+        wsRef.current.onmessage = null;
+        wsRef.current.onclose = null;
+        wsRef.current.onerror = null;
+        wsRef.current.close();
+        wsRef.current = null;
+      }
+
+      if (mediaRecorderRef.current) {
+        const recorder = mediaRecorderRef.current;
+        mediaRecorderRef.current = null;
+        recorder.ondataavailable = null;
+        recorder.onstop = null;
+        try {
+          if (recorder.state !== "inactive") {
+            recorder.stop();
+          }
+        } catch {
+          /* ignore */
+        }
+      }
+
+      const stream = videoRef.current?.srcObject as MediaStream | null;
+      if (stream) {
+        stream.getTracks().forEach((track) => track.stop());
+      }
+      if (videoRef.current) {
+        videoRef.current.srcObject = null;
+      }
+
+      if (rafRef.current) {
+        cancelAnimationFrame(rafRef.current);
+        rafRef.current = null;
+      }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -364,7 +400,7 @@ const VideoRecording = () => {
         const blob = new Blob(recordedChunks.current, { type: "video/webm" });
         const formData = new FormData();
         formData.append("patient_id", id || "");
-        formData.append("test_name", currentTest?.name || "unknown");
+        formData.append("test_name", currentTest?.id || "unknown");
         formData.append("video", blob, "recording.webm");
 
         try {
@@ -374,10 +410,20 @@ const VideoRecording = () => {
           });
           if (resp.ok) {
             const data = await resp.json();
+            const diskHint = data?.disk_path
+              ? data.disk_path
+              : data?.filename
+              ? `backend/recordings/${data.filename}`
+              : undefined;
             toast({
               title: "Recording Saved",
-              description: `Saved as ${data.filename}`,
+              description: diskHint ? `Saved to ${diskHint}` : `Saved as ${data.filename}`,
             });
+            if (data?.filename) {
+              console.info(
+                `[VideoRecording] Saved video '${data.filename}' at '${diskHint || "(unknown path)"}'`
+              );
+            }
           } else throw new Error("Upload failed");
         } catch (err) {
           console.error("Upload error:", err);

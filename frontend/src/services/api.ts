@@ -102,6 +102,18 @@ const convertBackendToFrontend = (backendPatient: BackendPatient) => {
   const firstName = nameParts[0] || '';
   const lastName = nameParts.slice(1).join(' ') || '';
   const normalizedBirthDate = normalizeBirthDate(backendPatient.birthDate);
+  const doctorNotesHistoryRaw = backendPatient.doctors_notes_history || [];
+  const labResultsHistoryRaw = backendPatient.lab_results_history || [];
+
+  const latestDoctorNote = doctorNotesHistoryRaw
+    .map(entry => ({
+      ...entry,
+      parsedDate: new Date(entry.date)
+    }))
+    .sort((a, b) => (b.parsedDate?.getTime() || 0) - (a.parsedDate?.getTime() || 0))[0];
+
+  const lastVisit = latestDoctorNote?.parsedDate ?? null;
+  const primaryPhysician = latestDoctorNote?.added_by?.trim() || null;
   
   // Debug logging (commented out)
   // console.log('Converting backend patient:', backendPatient.patient_id);
@@ -118,21 +130,23 @@ const convertBackendToFrontend = (backendPatient: BackendPatient) => {
     weight: `${backendPatient.weight || 0} kg`,
     labResults: JSON.stringify(backendPatient.lab_results || {}),
     doctorNotes: backendPatient.doctors_notes || '',
-    labResultsHistory: (backendPatient.lab_results_history || []).map(entry => ({
+    labResultsHistory: labResultsHistoryRaw.map(entry => ({
       id: entry.id,
       date: new Date(entry.date),
       results: entry.results,
       addedBy: entry.added_by
     })),
-    doctorNotesHistory: (backendPatient.doctors_notes_history || []).map(entry => ({
+    doctorNotesHistory: doctorNotesHistoryRaw.map(entry => ({
       id: entry.id,
       date: new Date(entry.date),
       note: entry.note,
       addedBy: entry.added_by
     })),
     severity: mapSeverity(backendPatient.severity || 'low'),
-    createdAt: new Date(), // Backend doesn't provide this, using current date
-    updatedAt: new Date(), // Backend doesn't provide this, using current date
+    lastVisit,
+    primaryPhysician,
+    createdAt: lastVisit ?? new Date(), // Backend doesn't provide this, approximated from last visit
+    updatedAt: lastVisit ?? new Date(), // Backend doesn't provide this, approximated from last visit
   };
 };
 

@@ -11,13 +11,13 @@
     "lab_results_history": [
       {
         "id": "lab_1",
-        "date": "2025-09-15T10:00:00Z",
+        "date": "2025-09-15T10:00:00.000Z",
         "results": "CBC: Normal, Dopamine markers: Elevated (120 ng/mL), Glucose: 95 mg/dL",
         "added_by": "Dr. Smith"
       },
       {
         "id": "lab_2",
-        "date": "2025-08-01T14:30:00Z",
+        "date": "2025-08-01T14:30:00.000Z",
         "results": "CBC: Normal, Dopamine markers: 105 ng/mL, Cholesterol: 180 mg/dL",
         "added_by": "Dr. Johnson"
       }
