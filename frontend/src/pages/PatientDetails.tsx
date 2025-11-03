@@ -221,6 +221,23 @@ const PatientDetails = () => {
 
         const [firstName, lastName] = data.patient.name.split(' ');
 
+        const labResultsHistory = (data.patient.lab_results_history || []).map((entry: any) => ({
+          id: entry.id,
+          date: new Date(entry.date),
+          results: entry.results,
+          addedBy: entry.added_by,
+        }));
+
+        const doctorNotesHistory = (data.patient.doctors_notes_history || []).map((entry: any) => ({
+          id: entry.id,
+          date: new Date(entry.date),
+          note: entry.note,
+          addedBy: entry.added_by,
+        }));
+
+        const latestLabResult = data.patient.latest_lab_result || data.patient.lab_results_history?.[0] || null;
+        const latestDoctorNote = data.patient.latest_doctor_note || data.patient.doctors_notes_history?.[0] || null;
+
         setPatient({
           id: data.patient.patient_id,
           firstName,
@@ -229,20 +246,10 @@ const PatientDetails = () => {
           birthDate: data.patient.birthDate,
           height: `${data.patient.height}`,
           weight: `${data.patient.weight}`,
-          labResults: data.patient.lab_results?.notes || '',
-          doctorNotes: data.patient.doctors_notes || '',
-          labResultsHistory: (data.patient.lab_results_history || []).map((entry: any) => ({
-            id: entry.id,
-            date: new Date(entry.date),
-            results: entry.results,
-            addedBy: entry.added_by
-          })),
-          doctorNotesHistory: (data.patient.doctors_notes_history || []).map((entry: any) => ({
-            id: entry.id,
-            date: new Date(entry.date),
-            note: entry.note,
-            addedBy: entry.added_by
-          })),
+          labResults: latestLabResult?.results || '',
+          doctorNotes: latestDoctorNote?.note || '',
+          labResultsHistory,
+          doctorNotesHistory,
           severity: mapSeverity(data.patient.severity),
           createdAt: new Date(), // Optional: replace with actual timestamps
           updatedAt: new Date(),

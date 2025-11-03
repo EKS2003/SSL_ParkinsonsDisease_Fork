@@ -43,27 +43,31 @@ const calculateAge = (birthDate: string): number => {
 };
 
 // Types for backend API
+interface BackendLabResultEntry {
+  id?: string;
+  date: string;
+  results: string;
+  added_by?: string;
+}
+
+interface BackendDoctorNoteEntry {
+  id?: string;
+  date: string;
+  note: string;
+  added_by?: string;
+}
+
 interface BackendPatient {
   patient_id: string;
   name: string;
   birthDate: string;
   height: number;
   weight: number;
-  lab_results: Record<string, any>;
-  doctors_notes: string;
   severity: string;
-  lab_results_history?: Array<{
-    id: string;
-    date: string;
-    results: string;
-    added_by: string;
-  }>;
-  doctors_notes_history?: Array<{
-    id: string;
-    date: string;
-    note: string;
-    added_by: string;
-  }>;
+  lab_results_history?: BackendLabResultEntry[];
+  doctors_notes_history?: BackendDoctorNoteEntry[];
+  latest_lab_result?: BackendLabResultEntry | null;
+  latest_doctor_note?: BackendDoctorNoteEntry | null;
 }
 
 interface BackendPatientCreate {
@@ -72,9 +76,9 @@ interface BackendPatientCreate {
   birthDate: string;
   height: string;
   weight: string;
-  lab_results?: Record<string, any>;
-  doctors_notes?: string;
   severity: string;
+  lab_results_history?: BackendLabResultEntry[];
+  doctors_notes_history?: BackendDoctorNoteEntry[];
 }
 
 interface BackendPatientUpdate {
@@ -83,9 +87,9 @@ interface BackendPatientUpdate {
   birthDate?: string;
   height?: string;
   weight?: string;
-  lab_results?: Record<string, any>;
-  doctors_notes?: string;
   severity?: string;
+  lab_results_history?: BackendLabResultEntry[];
+  doctors_notes_history?: BackendDoctorNoteEntry[];
 }
 
 interface ApiResponse<T> {
@@ -105,43 +109,61 @@ const convertBackendToFrontend = (backendPatient: BackendPatient) => {
   const doctorNotesHistoryRaw = backendPatient.doctors_notes_history || [];
   const labResultsHistoryRaw = backendPatient.lab_results_history || [];
 
-  const latestDoctorNote = doctorNotesHistoryRaw
-    .map(entry => ({
-      ...entry,
-      parsedDate: new Date(entry.date)
-    }))
-    .sort((a, b) => (b.parsedDate?.getTime() || 0) - (a.parsedDate?.getTime() || 0))[0];
+  const doctorNotesHistory = doctorNotesHistoryRaw.map(entry => ({
+    id: entry.id || `note_${Date.now()}`,
+    date: new Date(entry.date),
+    note: entry.note,
+    addedBy: entry.added_by || 'Unknown',
+  }));
 
-  const lastVisit = latestDoctorNote?.parsedDate ?? null;
-  const primaryPhysician = latestDoctorNote?.added_by?.trim() || null;
-  
-  // Debug logging (commented out)
-  // console.log('Converting backend patient:', backendPatient.patient_id);
-  // console.log('Doctor notes history:', backendPatient.doctors_notes_history);
-  // console.log('Legacy doctor notes:', backendPatient.doctors_notes);
-  
+  const labResultsHistory = labResultsHistoryRaw.map(entry => ({
+    id: entry.id || `lab_${Date.now()}`,
+    date: new Date(entry.date),
+    results: entry.results,
+    addedBy: entry.added_by || 'Unknown',
+  }));
+
+  const latestDoctorNoteBackend = backendPatient.latest_doctor_note || doctorNotesHistoryRaw
+    .slice()
+    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0];
+
+  const latestLabResultBackend = backendPatient.latest_lab_result || labResultsHistoryRaw
+    .slice()
+    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0];
+
+  const latestDoctorNote = latestDoctorNoteBackend
+    ? {
+        id: latestDoctorNoteBackend.id || `note_${Date.now()}`,
+        date: new Date(latestDoctorNoteBackend.date),
+        note: latestDoctorNoteBackend.note,
+        addedBy: latestDoctorNoteBackend.added_by || 'Unknown',
+      }
+    : undefined;
+
+  const latestLabResult = latestLabResultBackend
+    ? {
+        id: latestLabResultBackend.id || `lab_${Date.now()}`,
+        date: new Date(latestLabResultBackend.date),
+        results: latestLabResultBackend.results,
+        addedBy: latestLabResultBackend.added_by || 'Unknown',
+      }
+    : undefined;
+
+  const lastVisit = latestDoctorNote?.date ?? null;
+  const primaryPhysician = latestDoctorNote?.addedBy?.trim() || null;
+
   return {
     id: backendPatient.patient_id || '',
     firstName,
     lastName,
     recordNumber: backendPatient.patient_id || '', // Using patient_id as record number
-  birthDate: normalizedBirthDate || backendPatient.birthDate || '',
+    birthDate: normalizedBirthDate || backendPatient.birthDate || '',
     height: `${backendPatient.height || 0} cm`,
     weight: `${backendPatient.weight || 0} kg`,
-    labResults: JSON.stringify(backendPatient.lab_results || {}),
-    doctorNotes: backendPatient.doctors_notes || '',
-    labResultsHistory: labResultsHistoryRaw.map(entry => ({
-      id: entry.id,
-      date: new Date(entry.date),
-      results: entry.results,
-      addedBy: entry.added_by
-    })),
-    doctorNotesHistory: doctorNotesHistoryRaw.map(entry => ({
-      id: entry.id,
-      date: new Date(entry.date),
-      note: entry.note,
-      addedBy: entry.added_by
-    })),
+    labResults: latestLabResult?.results || '',
+    doctorNotes: latestDoctorNote?.note || '',
+    labResultsHistory,
+    doctorNotesHistory,
     severity: mapSeverity(backendPatient.severity || 'low'),
     lastVisit,
     primaryPhysician,
@@ -158,13 +180,44 @@ const convertFrontendToBackend = (frontendPatient: any): BackendPatientCreate =>
   const weightStr = (frontendPatient.weight || '').replace(/[^\d.]/g, '');
   const normalizedBirthDate = normalizeBirthDate(frontendPatient.birthDate);
   
-  let parsedLabResults: Record<string, any> = {};
-  if (frontendPatient.labResults) {
-    try {
-      parsedLabResults = JSON.parse(frontendPatient.labResults);
-    } catch {
-      parsedLabResults = { notes: frontendPatient.labResults };
-    }
+  const ensureISODate = (value: any): string => {
+    if (value instanceof Date) return value.toISOString();
+    const parsed = new Date(value);
+    return Number.isNaN(parsed.getTime()) ? new Date().toISOString() : parsed.toISOString();
+  };
+
+  const labResultsHistory: BackendLabResultEntry[] = (frontendPatient.labResultsHistory || []).map((entry: any) => ({
+    id: entry.id,
+    date: ensureISODate(entry.date),
+    results: entry.results,
+    added_by: entry.addedBy,
+  }));
+
+  const doctorNotesHistory: BackendDoctorNoteEntry[] = (frontendPatient.doctorNotesHistory || []).map((entry: any) => ({
+    id: entry.id,
+    date: ensureISODate(entry.date),
+    note: entry.note,
+    added_by: entry.addedBy,
+  }));
+
+  const trimmedLabResults = (frontendPatient.labResults || '').trim();
+  if (trimmedLabResults && labResultsHistory.length === 0) {
+    labResultsHistory.push({
+      id: `lab_${Date.now()}`,
+      date: new Date().toISOString(),
+      results: trimmedLabResults,
+      added_by: frontendPatient.primaryPhysician || 'Unknown',
+    });
+  }
+
+  const trimmedDoctorNotes = (frontendPatient.doctorNotes || '').trim();
+  if (trimmedDoctorNotes && doctorNotesHistory.length === 0) {
+    doctorNotesHistory.push({
+      id: `note_${Date.now()}`,
+      date: new Date().toISOString(),
+      note: trimmedDoctorNotes,
+      added_by: frontendPatient.primaryPhysician || 'Unknown',
+    });
   }
 
   return {
@@ -173,9 +226,9 @@ const convertFrontendToBackend = (frontendPatient: any): BackendPatientCreate =>
     birthDate: normalizedBirthDate || frontendPatient.birthDate,
     height: heightStr || '0',
     weight: weightStr || '0',
-    lab_results: parsedLabResults,
-    doctors_notes: frontendPatient.doctorNotes || '',
     severity: mapSeverityToBackend(frontendPatient.severity),
+    lab_results_history: labResultsHistory,
+    doctors_notes_history: doctorNotesHistory,
   };
 };
 
@@ -352,15 +405,43 @@ class ApiService {
       const weightStr = updateData.weight.replace(/[^\d.]/g, '');
       backendData.weight = weightStr || '0';
     }
-    if (updateData.labResults) {
-      try {
-        backendData.lab_results = JSON.parse(updateData.labResults);
-      } catch (error) {
-        console.error('Error parsing labResults:', error);
-        backendData.lab_results = { notes: updateData.labResults };
-      }
+    const ensureISODate = (value: any): string => {
+      if (value instanceof Date) return value.toISOString();
+      const parsed = new Date(value);
+      return Number.isNaN(parsed.getTime()) ? new Date().toISOString() : parsed.toISOString();
+    };
+
+    if (updateData.labResultsHistory) {
+      backendData.lab_results_history = updateData.labResultsHistory.map((entry: any) => ({
+        id: entry.id,
+        date: ensureISODate(entry.date),
+        results: entry.results,
+        added_by: entry.addedBy,
+      }));
+    } else if (typeof updateData.labResults === 'string' && updateData.labResults.trim()) {
+      backendData.lab_results_history = [{
+        id: `lab_${Date.now()}`,
+        date: new Date().toISOString(),
+        results: updateData.labResults.trim(),
+        added_by: updateData.primaryPhysician || 'Unknown',
+      }];
     }
-    if (updateData.doctorNotes !== undefined) backendData.doctors_notes = updateData.doctorNotes;
+
+    if (updateData.doctorNotesHistory) {
+      backendData.doctors_notes_history = updateData.doctorNotesHistory.map((entry: any) => ({
+        id: entry.id,
+        date: ensureISODate(entry.date),
+        note: entry.note,
+        added_by: entry.addedBy,
+      }));
+    } else if (typeof updateData.doctorNotes === 'string' && updateData.doctorNotes.trim()) {
+      backendData.doctors_notes_history = [{
+        id: `note_${Date.now()}`,
+        date: new Date().toISOString(),
+        note: updateData.doctorNotes.trim(),
+        added_by: updateData.primaryPhysician || 'Unknown',
+      }];
+    }
     if (updateData.severity) {
       const mappedSeverity = mapSeverityToBackend(updateData.severity);
       console.log('Severity mapping:', updateData.severity, '->', mappedSeverity);

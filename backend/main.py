@@ -82,34 +82,47 @@ app.add_middleware(
 )
 
 # ============ Models ============
+
+
+class LabResultHistoryEntry(BaseModel):
+    id: Optional[str] = None
+    date: datetime
+    results: str
+    added_by: Optional[str] = None
+
+
+class DoctorNoteHistoryEntry(BaseModel):
+    id: Optional[str] = None
+    date: datetime
+    note: str
+    added_by: Optional[str] = None
+
+
 class PatientCreate(BaseModel):
     name: str
-    # age: int = Field(..., ge=0, le=120)
-    birthDate: str  # Add this line
+    birthDate: str
     height: str = Field(..., min_length=1)
     weight: str = Field(..., min_length=1)
-    lab_results: Optional[Dict] = Field(default_factory=dict)
-    doctors_notes: Optional[str] = ""
     severity: str = Field(
         "Stage 1",
         pattern="^(low|medium|high|mild|moderate|severe|stage [1-5])$"
     )
+    lab_results_history: List[LabResultHistoryEntry] = Field(default_factory=list)
+    doctors_notes_history: List[DoctorNoteHistoryEntry] = Field(default_factory=list)
 
 
 class PatientUpdate(BaseModel):
     name: Optional[str] = None
-    # age: Optional[int] = Field(None, ge=0, le=120)
     birthDate: Optional[str] = None
     height: Optional[str] = None
     weight: Optional[str] = None
-    lab_results: Optional[Dict] = None
-    lab_results_history: Optional[List[Dict]] = None
-    doctors_notes: Optional[str] = None
-    doctors_notes_history: Optional[List[Dict]] = None
+    lab_results_history: Optional[List[LabResultHistoryEntry]] = None
+    doctors_notes_history: Optional[List[DoctorNoteHistoryEntry]] = None
     severity: Optional[str] = Field(
         None,
         pattern="^(low|medium|high|mild|moderate|severe|stage [1-5])$"
     )
+
 
 class PatientResponse(BaseModel):
     patient_id: str
@@ -117,11 +130,11 @@ class PatientResponse(BaseModel):
     birthDate: str
     height: str  # Changed to str to handle existing data
     weight: str  # Changed to str to handle existing data
-    lab_results: Dict
-    doctors_notes: str
     severity: str
-    lab_results_history: Optional[List[Dict]] = []
-    doctors_notes_history: Optional[List[Dict]] = []
+    lab_results_history: List[LabResultHistoryEntry] = Field(default_factory=list)
+    doctors_notes_history: List[DoctorNoteHistoryEntry] = Field(default_factory=list)
+    latest_lab_result: Optional[LabResultHistoryEntry] = None
+    latest_doctor_note: Optional[DoctorNoteHistoryEntry] = None
 
 class PatientsListResponse(BaseModel):
     success: bool
@@ -404,17 +417,17 @@ async def create_patient(patient: PatientCreate):
     except ValueError:
         weight = 0.0
 
-    lab_results = patient.lab_results if patient.lab_results is not None else {}
-    doctors_notes = patient.doctors_notes if patient.doctors_notes is not None else ""
+    lab_results_history = [entry.dict(exclude_none=True) for entry in patient.lab_results_history]
+    doctors_notes_history = [entry.dict(exclude_none=True) for entry in patient.doctors_notes_history]
     result = await async_create_patient(
         name=patient.name,
         # age=patient.age,  # Add this line
         birthDate=patient.birthDate,
         height=height,
         weight=weight,
-        lab_results=lab_results,
-        doctors_notes=doctors_notes,
-        severity=patient.severity
+        severity=patient.severity,
+        lab_results_history=lab_results_history,
+        doctors_notes_history=doctors_notes_history
     )
 
     if not result.get("success", False):
@@ -444,6 +457,18 @@ async def update_patient(patient_id: str, patient_update: PatientUpdate):
 
     if not update_data:
         raise HTTPException(status_code=400, detail="No valid update data provided")
+
+    if "lab_results_history" in update_data:
+        update_data["lab_results_history"] = [
+            entry if isinstance(entry, dict) else entry.dict(exclude_none=True)
+            for entry in (update_data["lab_results_history"] or [])
+        ]
+
+    if "doctors_notes_history" in update_data:
+        update_data["doctors_notes_history"] = [
+            entry if isinstance(entry, dict) else entry.dict(exclude_none=True)
+            for entry in (update_data["doctors_notes_history"] or [])
+        ]
 
     result = await async_update_patient_info(patient_id, update_data)
 
