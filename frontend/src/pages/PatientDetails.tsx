@@ -1,13 +1,13 @@
-import { useCallback, useEffect, useState} from 'react';
+import { useCallback, useEffect, useMemo, useState} from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { ArrowLeft, Plus, Calendar, FileText, Activity, Edit, Play, Clock, User, Stethoscope } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
-import { Patient, Test, LabResultEntry, DoctorNoteEntry } from '@/types/patient';
+import { Patient, Test, LabResultEntry, DoctorNoteEntry, TestIndicator } from '@/types/patient';
 import { getSeverityColor, calculateAge } from '@/lib/utils';
-import { mapSeverity } from '@/services/api';
+import apiService, { mapSeverity } from '@/services/api';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -43,20 +43,43 @@ const mockTests: Test[] = [
   {
     id: 'test2',
     patientId: '1',
-    name: 'Palm Open Evaluation',
-    type: 'palm-open',
+    name: 'Finger Tapping Evaluation',
+    type: 'finger-tapping',
     date: new Date('2024-01-18'),
     status: 'completed',
   },
   {
     id: 'test3',
     patientId: '1',
-    name: 'Stand and Sit Assessment',
-    type: 'stand-and-sit',
+    name: 'Fist Open and Close Assessment',
+    type: 'fist-open-close',
     date: new Date('2024-01-15'),
     status: 'completed',
   },
 ];
+
+
+const indicatorBadgeClasses: Record<TestIndicator['color'], string> = {
+  success: 'bg-success text-success-foreground',
+  warning: 'bg-warning text-warning-foreground',
+  destructive: 'bg-destructive text-destructive-foreground',
+  muted: 'bg-muted text-muted-foreground',
+};
+
+const testTypeStyles: Record<Test['type'], { container: string; badge: string }> = {
+  'stand-and-sit': {
+    container: 'border-l-4 border-l-emerald-500/80 bg-emerald-50/40',
+    badge: 'border border-emerald-200 bg-emerald-100 text-emerald-700',
+  },
+  'finger-tapping': {
+    container: 'border-l-4 border-l-sky-500/80 bg-sky-50/40',
+    badge: 'border border-sky-200 bg-sky-100 text-sky-700',
+  },
+  'fist-open-close': {
+    container: 'border-l-4 border-l-amber-500/80 bg-amber-50/40',
+    badge: 'border border-amber-200 bg-amber-100 text-amber-700',
+  },
+};
 
 
 
@@ -66,6 +89,8 @@ const PatientDetails = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [tests, setTests] = useState<Test[]>([]); // Placeholder – replace with real API if available
+  const [testsLoading, setTestsLoading] = useState(true);
+  const [testSearch, setTestSearch] = useState('');
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [editData, setEditData] = useState<Partial<Patient>>({});
   const [isLabResultModalOpen, setIsLabResultModalOpen] = useState(false);
@@ -73,6 +98,28 @@ const PatientDetails = () => {
   const [newLabResult, setNewLabResult] = useState('');
   const [newDoctorNote, setNewDoctorNote] = useState('');
   const { toast } = useToast();
+
+  const sortedTests = useMemo(
+    () => [...tests].sort((a, b) => b.date.getTime() - a.date.getTime()),
+    [tests]
+  );
+
+  const filteredTests = useMemo(() => {
+    const query = testSearch.trim().toLowerCase();
+    if (!query) return sortedTests;
+    return sortedTests.filter((test) => {
+      const haystack = [
+        test.name,
+        test.type,
+        test.indicator?.label,
+        test.recordingFile,
+        test.recordingUrl,
+      ]
+        .filter(Boolean)
+        .map((value) => String(value).toLowerCase());
+      return haystack.some((value) => value.includes(query));
+    });
+  }, [sortedTests, testSearch]);
 
   const openForEdit = useCallback(() => {
     if (!patient) return;
@@ -264,18 +311,39 @@ const PatientDetails = () => {
     fetchPatient();
   }, [id]);
 
-  const getStatusColor = (status: Test['status']) => {
-    switch (status) {
-      case 'completed':
-        return 'bg-success text-success-foreground';
-      case 'in-progress':
-        return 'bg-warning text-warning-foreground';
-      case 'pending':
-        return 'bg-muted text-muted-foreground';
-      default:
-        return 'bg-muted text-muted-foreground';
-    }
-  };
+  useEffect(() => {
+    if (!id) return;
+
+    let cancelled = false;
+    const fetchTests = async () => {
+      setTestsLoading(true);
+      setTests([]);
+      try {
+        const response = await apiService.getPatientTests(id);
+        if (cancelled) return;
+        if (response.success && response.data) {
+          setTests(response.data);
+        } else {
+          setTests([]);
+        }
+      } catch (err) {
+        if (!cancelled) {
+          console.error('Error fetching test history:', err);
+          setTests([]);
+        }
+      } finally {
+        if (!cancelled) {
+          setTestsLoading(false);
+        }
+      }
+    };
+
+    fetchTests();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [id]);
 
   if (loading) {
     return (
@@ -469,38 +537,100 @@ const PatientDetails = () => {
           <div className="space-y-6">
             <Card>
               <CardHeader>
-                <CardTitle className="flex items-center">
-                  <Activity className="mr-2 h-5 w-5" />
-                  Test History
-                </CardTitle>
+                <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                  <CardTitle className="flex items-center">
+                    <Activity className="mr-2 h-5 w-5" />
+                    Test History
+                  </CardTitle>
+                  <div className="w-full lg:w-72">
+                    <Input
+                      placeholder="Search tests by name or type..."
+                      value={testSearch}
+                      onChange={(event) => setTestSearch(event.target.value)}
+                      className="h-9"
+                    />
+                  </div>
+                </div>
               </CardHeader>
               <CardContent>
-                <div className="space-y-4">
-                  {tests.length > 0 ? (
-                    tests.map((test) => (
-                      <div key={test.id} className="border rounded-lg p-4">
-                        <div className="flex items-start justify-between mb-2">
-                          <div>
-                            <h4 className="font-medium text-sm">{test.name}</h4>
-                            <div className="text-xs text-muted-foreground mt-1">
-                              <Calendar className="inline-block mr-1 h-3 w-3" />
-                              {test.date.toLocaleDateString()}
+                <div className="space-y-4 max-h-[35rem] overflow-y-auto pr-1">
+                  {testsLoading ? (
+                    <div className="text-center py-8 text-sm text-muted-foreground">
+                      Loading test history...
+                    </div>
+                  ) : filteredTests.length > 0 ? (
+                    filteredTests.map((test) => {
+                      const badgeVariant = test.indicator ? indicatorBadgeClasses[test.indicator.color] : indicatorBadgeClasses.muted;
+                      const typeStyle = testTypeStyles[test.type];
+                      const metaPieces: string[] = [];
+                      if (typeof test.frameCount === 'number' && Number.isFinite(test.frameCount)) {
+                        metaPieces.push(`${test.frameCount} frames`);
+                      }
+                      if (typeof test.fps === 'number' && Number.isFinite(test.fps)) {
+                        metaPieces.push(`${test.fps.toFixed(1)} fps`);
+                      }
+                      if (typeof test.similarity === 'number' && Number.isFinite(test.similarity)) {
+                        metaPieces.push(`Similarity ${(test.similarity * 100).toFixed(1)}%`);
+                      }
+
+                      return (
+                        <div
+                          key={test.id}
+                          className={`border rounded-lg p-4 transition-colors ${typeStyle.container}`}
+                        >
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="space-y-1">
+                              <div className="flex items-center gap-2">
+                                <h4 className="font-medium text-sm">{test.name}</h4>
+                                <Badge
+                                  variant="outline"
+                                  className={`uppercase tracking-wide text-[10px] ${typeStyle.badge}`}
+                                >
+                                  {test.type.replace(/-/g, ' ')}
+                                </Badge>
+                              </div>
+                              <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                                <span className="inline-flex items-center gap-1">
+                                  <Calendar className="h-3 w-3" />
+                                  {test.date ? test.date.toLocaleString() : 'Unknown date'}
+                                </span>
+                                {metaPieces.map((piece) => (
+                                  <span key={piece} className="inline-flex items-center gap-1">
+                                    <span className="opacity-50">•</span>
+                                    {piece}
+                                  </span>
+                                ))}
+                              </div>
                             </div>
+                            <Badge className={badgeVariant} variant="secondary">
+                              {/* {test.indicator?.label ?? test.status} */}
+                            </Badge>
                           </div>
-                          <Badge className={getStatusColor(test.status)} variant="secondary">
-                            {test.status}
-                          </Badge>
+                          <div className="mt-3 flex flex-wrap gap-2">
+                            {test.summaryAvailable && (
+                              <Link to={`/patient/${id}/video-summary/${encodeURIComponent(test.id)}`}>
+                                <Button size="sm" variant="outline" className="w-full sm:w-auto">
+                                  <Play className="mr-2 h-3 w-3" />
+                                  View Results
+                                </Button>
+                              </Link>
+                            )}
+                            {test.videoUrl && (
+                              <a href={test.videoUrl} target="_blank" rel="noreferrer">
+                                <Button size="sm" variant="ghost" className="w-full sm:w-auto">
+                                  Open Recording
+                                </Button>
+                              </a>
+                            )}
+                          </div>
                         </div>
-                        {test.status === 'completed' && (
-                          <Link to={`/patient/${id}/video-summary/${test.id}`}>
-                            <Button size="sm" variant="outline" className="w-full mt-2">
-                              <Play className="mr-2 h-3 w-3" />
-                              View Results
-                            </Button>
-                          </Link>
-                        )}
-                      </div>
-                    ))
+                      );
+                    })
+                  ) : tests.length > 0 ? (
+                    <div className="text-center py-8">
+                      <FileText className="mx-auto h-8 w-8 text-muted-foreground mb-2" />
+                      <p className="text-sm text-muted-foreground">No tests match "{testSearch}"</p>
+                    </div>
                   ) : (
                     <div className="text-center py-8">
                       <FileText className="mx-auto h-8 w-8 text-muted-foreground mb-2" />

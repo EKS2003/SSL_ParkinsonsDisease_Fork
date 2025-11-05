@@ -100,7 +100,8 @@ class DoctorNoteHistoryEntry(BaseModel):
 
 class PatientCreate(BaseModel):
     name: str
-    birthDate: str
+    # age: int = Field(..., ge=0, le=120)
+    birthDate: str  # Add this line
     height: str = Field(..., min_length=1)
     weight: str = Field(..., min_length=1)
     severity: str = Field(
@@ -113,6 +114,7 @@ class PatientCreate(BaseModel):
 
 class PatientUpdate(BaseModel):
     name: Optional[str] = None
+    # age: Optional[int] = Field(None, ge=0, le=120)
     birthDate: Optional[str] = None
     height: Optional[str] = None
     weight: Optional[str] = None
@@ -357,11 +359,23 @@ async def _camera_ws_handler(websocket: WebSocket):
 
                 try:
                     thm = TestHistoryManager()
+                    dtw_details = payload if payload.get("ok") else {}
                     thm.add_patient_test(patient_id or "unknown", {
-                        "test_name": test_name or "unknown",
+                        "test_id": test_id,
+                        "test_name": (dtw_details.get("test_name") if isinstance(dtw_details, dict) else None) or (test_name or "unknown"),
                         "date": datetime.utcnow().isoformat(),
                         "recording_file": saved_name,
-                        "frame_count": len(frames)
+                        "frame_count": len(frames),
+                        "fps": fps_hint,
+                        "status": "completed",
+                        "model": model,
+                        "dtw": {
+                            "distance": dtw_details.get("distance"),
+                            "avg_step_cost": dtw_details.get("avg_step_cost"),
+                            "similarity": dtw_details.get("similarity"),
+                            "session_id": dtw_details.get("session_id"),
+                            "artifacts_dir": (dtw_details.get("artifacts") or {}).get("dir") if dtw_details.get("artifacts") else None,
+                        } if dtw_details else None,
                     })
                 except Exception:
                     pass

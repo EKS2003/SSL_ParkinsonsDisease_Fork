@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { ArrowLeft, Play, FileText, Activity, Video, Upload } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -6,9 +6,16 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { useToast } from '@/hooks/use-toast';
-import { Patient, Test, AVAILABLE_TESTS } from '@/types/patient';
+import { Patient, Test, AVAILABLE_TESTS, TestIndicator } from '@/types/patient';
 import apiService from '@/services/api';
 import { getSeverityColor, calculateAge } from '@/lib/utils';
+
+const indicatorBadgeClasses: Record<TestIndicator['color'], string> = {
+  success: 'bg-success text-success-foreground',
+  warning: 'bg-warning text-warning-foreground',
+  destructive: 'bg-destructive text-destructive-foreground',
+  muted: 'bg-muted text-muted-foreground',
+};
 
 const TestSelection = () => {
   const { id } = useParams<{ id: string }>();
@@ -20,6 +27,10 @@ const TestSelection = () => {
   const [loading, setLoading] = useState(false);
   const [loadingPatient, setLoadingPatient] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const sortedHistory = useMemo(
+    () => [...testHistory].sort((a, b) => b.date.getTime() - a.date.getTime()),
+    [testHistory]
+  );
 
   useEffect(() => {
     const fetchData = async () => {
@@ -153,23 +164,70 @@ const TestSelection = () => {
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="space-y-3">
-                  {testHistory.slice(-3).map((test) => (
-                    <div key={test.id} className="border rounded-lg p-3">
-                      <div className="flex justify-between items-start">
-                        <div>
-                          <p className="font-medium text-sm">{test.name}</p>
-                          <p className="text-xs text-muted-foreground">
-                            {test.date ? new Date(test.date).toLocaleDateString() : ''}
-                          </p>
+                <div className="space-y-3 max-h-80 overflow-y-auto pr-1">
+                  {sortedHistory.length > 0 ? (
+                    sortedHistory.map((test) => {
+                      const badgeVariant = test.indicator ? indicatorBadgeClasses[test.indicator.color] : indicatorBadgeClasses.muted;
+                      const metaPieces: string[] = [];
+                      if (typeof test.frameCount === 'number' && Number.isFinite(test.frameCount)) {
+                        metaPieces.push(`${test.frameCount} frames`);
+                      }
+                      if (typeof test.fps === 'number' && Number.isFinite(test.fps)) {
+                        metaPieces.push(`${test.fps.toFixed(1)} fps`);
+                      }
+                      if (typeof test.similarity === 'number' && Number.isFinite(test.similarity)) {
+                        metaPieces.push(`Similarity ${(test.similarity * 100).toFixed(1)}%`);
+                      }
+
+                      return (
+                        <div key={test.id} className="border rounded-lg p-3">
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="space-y-1">
+                              <div className="flex items-center gap-2">
+                                <p className="font-medium text-sm">{test.name}</p>
+                                <Badge variant="outline" className="uppercase tracking-wide text-[10px]">
+                                  {test.type.replace(/-/g, ' ')}
+                                </Badge>
+                              </div>
+                              <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                                <span>{test.date ? test.date.toLocaleString() : 'Unknown date'}</span>
+                                {metaPieces.map((piece) => (
+                                  <span key={piece} className="inline-flex items-center gap-1">
+                                    <span className="opacity-50">•</span>
+                                    {piece}
+                                  </span>
+                                ))}
+                              </div>
+                            </div>
+                            <Badge variant="secondary" className={badgeVariant}>
+                              {test.indicator?.label ?? test.status}
+                            </Badge>
+                          </div>
+                          {test.indicator?.description && (
+                            <p className="text-xs text-muted-foreground mt-2">
+                              {test.indicator.description}
+                            </p>
+                          )}
+                          <div className="mt-2 flex flex-wrap gap-2">
+                            {test.summaryAvailable && (
+                              <Link to={`/patient/${id}/video-summary/${encodeURIComponent(test.id)}`}>
+                                <Button size="sm" variant="outline">
+                                  View Results
+                                </Button>
+                              </Link>
+                            )}
+                            {test.videoUrl && (
+                              <a href={test.videoUrl} target="_blank" rel="noreferrer">
+                                <Button size="sm" variant="ghost">
+                                  Open Recording
+                                </Button>
+                              </a>
+                            )}
+                          </div>
                         </div>
-                        <Badge variant="secondary" className="bg-success text-success-foreground">
-                          {test.status}
-                        </Badge>
-                      </div>
-                    </div>
-                  ))}
-                  {testHistory.length === 0 && (
+                      );
+                    })
+                  ) : (
                     <p className="text-sm text-muted-foreground text-center py-4">
                       No previous tests recorded
                     </p>

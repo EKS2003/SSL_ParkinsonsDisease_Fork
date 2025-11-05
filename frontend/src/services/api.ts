@@ -1,4 +1,41 @@
+import { AVAILABLE_TESTS, Test, TestIndicator } from '@/types/patient';
+
 const API_BASE_URL = 'http://localhost:8000'; //not using docker if you are swich back to 8000
+
+type TestType = Test['type'];
+type TestStatus = Test['status'];
+
+const TEST_METADATA: Record<TestType, { name: string; description: string }> = AVAILABLE_TESTS.reduce(
+  (acc, test) => {
+    acc[test.id] = { name: test.name, description: test.description };
+    return acc;
+  },
+  {
+    'stand-and-sit': { name: 'Stand and Sit Test', description: 'Measures sit-to-stand motor function' },
+    'finger-tapping': { name: 'Finger Tapping Test', description: 'Measures rapid finger dexterity' },
+    'fist-open-close': { name: 'Fist Open and Close Test', description: 'Assesses hand opening and closing cycles' },
+  } as Record<TestType, { name: string; description: string }>,
+);
+
+const STATUS_INDICATORS: Record<TestStatus, TestIndicator> = {
+  completed: {
+    color: 'success',
+    label: 'Completed',
+    description: 'Recording captured successfully.',
+  },
+  'in-progress': {
+    color: 'warning',
+    label: 'In Progress',
+    description: 'Recording underway. Metrics may still be processing.',
+  },
+  pending: {
+    color: 'muted',
+    label: 'Pending',
+    description: 'Test scheduled but no recording available yet.',
+  },
+};
+
+const KNOWN_TEST_TYPES: readonly TestType[] = ['stand-and-sit', 'finger-tapping', 'fist-open-close'] as const;
 
 export function normalizeBirthDate(value: string): string {
   if (!value) return '';
@@ -70,6 +107,42 @@ interface BackendPatient {
   latest_doctor_note?: BackendDoctorNoteEntry | null;
 }
 
+type IndicatorColor = TestIndicator['color'];
+
+interface BackendTestIndicator {
+  color?: string | null;
+  label?: string | null;
+  description?: string | null;
+}
+
+interface BackendDtwMetrics {
+  distance?: number | string | null;
+  avg_step_cost?: number | string | null;
+  similarity?: number | string | null;
+  session_id?: string | null;
+  artifacts_dir?: string | null;
+  artifacts?: { dir?: string | null } | null;
+}
+
+interface BackendTestEntry {
+  id?: string | null;
+  test_id?: string | null;
+  test_name?: string | null;
+  display_name?: string | null;
+  name?: string | null;
+  date?: string | null;
+  status?: string | null;
+  recording_file?: string | null;
+  recording_url?: string | null;
+  summary_available?: boolean | null;
+  frame_count?: number | string | null;
+  fps?: number | string | null;
+  dtw?: BackendDtwMetrics | null;
+  indicator?: BackendTestIndicator | null;
+  patient_id?: string | null;
+  model?: string | null;
+}
+
 interface BackendPatientCreate {
   name: string;
   age: number;
@@ -97,6 +170,123 @@ interface ApiResponse<T> {
   data?: T;
   error?: string;
 }
+
+const normalizeTestKey = (value?: string | null): string => {
+  if (!value) return '';
+  return value.trim().toLowerCase().replace(/[_\s]+/g, '-');
+};
+
+const resolveTestType = (value?: string | null): TestType => {
+  const normalized = normalizeTestKey(value);
+  if ((KNOWN_TEST_TYPES as readonly string[]).includes(normalized as TestType)) {
+    return normalized as TestType;
+  }
+  if (normalized === 'finger-taping') {
+    return 'finger-tapping';
+  }
+  return 'stand-and-sit';
+};
+
+const resolveTestStatus = (value?: string | null, hasRecording: boolean = false): TestStatus => {
+  const normalized = (value || '').trim().toLowerCase();
+  if (normalized === 'completed' || normalized === 'in-progress' || normalized === 'pending') {
+    return normalized as TestStatus;
+  }
+  return hasRecording ? 'completed' : 'pending';
+};
+
+const toDate = (value?: string | null): Date => {
+  if (!value) return new Date();
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? new Date() : parsed;
+};
+
+const isIndicatorColor = (value: string): value is IndicatorColor => {
+  return ['success', 'warning', 'destructive', 'muted'].includes(value);
+};
+
+const normalizeIndicator = (status: TestStatus, indicator?: BackendTestIndicator | null): TestIndicator => {
+  const base = { ...STATUS_INDICATORS[status] };
+  if (!indicator) {
+    return base;
+  }
+  if (indicator.color && typeof indicator.color === 'string' && isIndicatorColor(indicator.color)) {
+    base.color = indicator.color;
+  }
+  if (indicator.label && typeof indicator.label === 'string') {
+    base.label = indicator.label;
+  }
+  if (indicator.description && typeof indicator.description === 'string') {
+    base.description = indicator.description;
+  }
+  return base;
+};
+
+const resolveRecordingPaths = (recordingUrl?: string | null, recordingFile?: string | null) => {
+  let absolute: string | undefined;
+  let relative: string | undefined;
+
+  if (recordingUrl) {
+    if (recordingUrl.startsWith('http://') || recordingUrl.startsWith('https://')) {
+      absolute = recordingUrl;
+    } else {
+      relative = recordingUrl.startsWith('/') ? recordingUrl : `/${recordingUrl}`;
+      absolute = `${API_BASE_URL}${relative}`;
+    }
+  } else if (recordingFile) {
+    const sanitized = recordingFile.replace(/^\/+/, '');
+    relative = `/recordings/${sanitized}`;
+    absolute = `${API_BASE_URL}${relative}`;
+  }
+
+  return { relative, absolute };
+};
+
+const parseNumber = (value: number | string | null | undefined): number | null => {
+  if (value === null || value === undefined) return null;
+  if (typeof value === 'number') {
+    return Number.isFinite(value) ? value : null;
+  }
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+};
+
+const convertBackendTestToFrontend = (patientId: string, entry: BackendTestEntry): Test => {
+  const testType = resolveTestType(entry.test_name || entry.name || entry.display_name);
+  const metadata = TEST_METADATA[testType];
+  const recordingPaths = resolveRecordingPaths(entry.recording_url, entry.recording_file);
+  const hasRecording = Boolean(recordingPaths.absolute);
+  const status = resolveTestStatus(entry.status, hasRecording);
+  const indicator = normalizeIndicator(status, entry.indicator);
+  const testDate = toDate(entry.date);
+
+  const dtwMetrics = entry.dtw || null;
+  const similarity = dtwMetrics ? parseNumber(dtwMetrics.similarity) : null;
+  const distance = dtwMetrics ? parseNumber(dtwMetrics.distance) : null;
+
+  const rawId = entry.test_id || entry.id || entry.recording_file || `${testType}-${testDate.getTime()}`;
+  const sanitizedId = String(rawId).replace(/\s+/g, '-');
+
+  return {
+    id: sanitizedId,
+    patientId,
+    name: entry.display_name || entry.name || metadata?.name || 'Motor Test',
+    type: testType,
+    date: testDate,
+    status,
+    videoUrl: recordingPaths.absolute,
+    recordingUrl: recordingPaths.absolute ?? recordingPaths.relative,
+    recordingFile: entry.recording_file || undefined,
+    summaryAvailable: entry.summary_available ?? hasRecording,
+    frameCount: parseNumber(entry.frame_count),
+    fps: parseNumber(entry.fps),
+    similarity,
+    distance,
+    dtwSessionId: dtwMetrics && typeof dtwMetrics.session_id === 'string' ? dtwMetrics.session_id : null,
+    indicator,
+    results: undefined,
+  };
+};
 
 // Convert backend patient to frontend patient
 const convertBackendToFrontend = (backendPatient: BackendPatient) => {
@@ -520,12 +710,21 @@ class ApiService {
   }
 
   // Get test history for a patient
-  async getPatientTests(patientId: string): Promise<ApiResponse<any[]>> {
-    const response = await this.request<{ tests: any }>(`/patients/${patientId}/tests`);
+  async getPatientTests(patientId: string): Promise<ApiResponse<Test[]>> {
+    const response = await this.request<{ tests: BackendTestEntry[] } | BackendTestEntry[]>(
+      `/patients/${patientId}/tests`
+    );
+
     if (response.success && response.data) {
-      // Optionally, map/convert test data here
-      return { success: true, data: response.data.tests };
+      const payload = response.data;
+      const testsRaw = Array.isArray(payload) ? payload : payload.tests ?? [];
+      const converted = testsRaw
+        .filter(Boolean)
+        .map((entry) => convertBackendTestToFrontend(patientId, entry as BackendTestEntry));
+      converted.sort((a, b) => b.date.getTime() - a.date.getTime());
+      return { success: true, data: converted };
     }
+
     return { success: false, error: response.error };
   }
 

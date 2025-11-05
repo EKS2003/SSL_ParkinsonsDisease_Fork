@@ -2,10 +2,42 @@ import json
 import os
 import asyncio
 from datetime import datetime, timezone
-from typing import Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional, Union
 import threading
 import copy
 from uuid import uuid4
+_TEST_NAME_ALIASES = {
+    "stand-and-sit": "stand-and-sit",
+    "stand-sit": "stand-and-sit",
+    "stand_to_sit": "stand-and-sit",
+    "stand-and-sit-assessment": "stand-and-sit",
+    "stand-and-sit-test": "stand-and-sit",
+    "stand-&-sit": "stand-and-sit",
+    "stand-&-sit-assessment": "stand-and-sit",
+    "stand-and-sit-evaluation": "stand-and-sit",
+    "finger-tapping": "finger-tapping",
+    "finger_tapping": "finger-tapping",
+    "finger-taping": "finger-tapping",
+    "finger-tapping-test": "finger-tapping",
+    "finger-tapping-assessment": "finger-tapping",
+    "finger-tap": "finger-tapping",
+    "fist-open-close": "fist-open-close",
+    "fist_open_close": "fist-open-close",
+    "fist-open-close-test": "fist-open-close",
+    "fist-open-close-assessment": "fist-open-close",
+    "palm-open": "fist-open-close",
+    "palm_open": "fist-open-close",
+}
+
+
+def _normalize_test_name(value: Optional[str]) -> str:
+    normalized = (value or "").strip().lower()
+    if not normalized:
+        return "unknown"
+    normalized = normalized.replace(" ", "-").replace("_", "-").replace("&", "and")
+    while "--" in normalized:
+        normalized = normalized.replace("--", "-")
+    return _TEST_NAME_ALIASES.get(normalized, normalized)
 
 
 def normalize_severity(value: str) -> str:
@@ -846,6 +878,30 @@ async def async_filter_patients(criteria: Dict) -> Dict:
 class TestHistoryManager:
     _lock = threading.Lock()
 
+    _TEST_LABELS = {
+        "finger-tapping": "Finger Tapping Test",
+        "fist-open-close": "Fist Open and Close Test",
+        "stand-and-sit": "Stand and Sit Test",
+    }
+
+    _STATUS_INDICATORS = {
+        "completed": {
+            "color": "success",
+            "label": "Completed",
+            "description": "Recording captured successfully.",
+        },
+        "in-progress": {
+            "color": "warning",
+            "label": "In Progress",
+            "description": "Test recording underway; results may be incomplete.",
+        },
+        "pending": {
+            "color": "muted",
+            "label": "Pending",
+            "description": "Test scheduled but no recording stored yet.",
+        },
+    }
+
     def __init__(self, file_path: str = TEST_HISTORY_FILE):
         self.file_path = file_path
         self._load()
@@ -861,16 +917,131 @@ class TestHistoryManager:
         with open(self.file_path, 'w') as f:
             json.dump(self.data, f, indent=2)
 
+    def _default_display_name(self, test_name: str) -> str:
+        if not test_name:
+            return "Unknown Test"
+        if test_name in self._TEST_LABELS:
+            return self._TEST_LABELS[test_name]
+        return test_name.replace("-", " ").title()
+
+    def _normalize_indicator(self, status: str, indicator: Optional[Dict[str, Any]]) -> Dict[str, str]:
+        status_key = (status or "").strip().lower() or "pending"
+        base = self._STATUS_INDICATORS.get(status_key, self._STATUS_INDICATORS["pending"]).copy()
+        if not indicator or not isinstance(indicator, dict):
+            return base
+        merged = base
+        if "color" in indicator:
+            merged["color"] = str(indicator["color"]) or base["color"]
+        if "label" in indicator:
+            merged["label"] = str(indicator["label"]) or base["label"]
+        if "description" in indicator:
+            merged["description"] = str(indicator["description"]) or base["description"]
+        return merged
+
+    def _normalize_entry(self, patient_id: str, raw_entry: Dict[str, Any]) -> Dict[str, Any]:
+        entry = dict(raw_entry or {})
+
+        test_name_raw = entry.get("test_name") or entry.get("name") or entry.get("test") or ""
+        normalized_test_name = _normalize_test_name(test_name_raw)
+        entry["test_name"] = normalized_test_name
+        entry["display_name"] = entry.get("display_name") or self._default_display_name(normalized_test_name)
+        entry["patient_id"] = patient_id
+
+        entry["date"] = Patient._normalize_date_value(entry.get("date"))
+
+        recording_file = entry.get("recording_file") or entry.get("recording")
+        if recording_file:
+            base_file = os.path.basename(str(recording_file))
+            entry["recording_file"] = base_file
+            entry.setdefault("recording_url", f"/recordings/{base_file}")
+
+        existing_id = entry.get("test_id") or entry.get("id")
+        if existing_id:
+            token = str(existing_id)
+        else:
+            candidate = entry.get("recording_file") or entry.get("session_id") or entry.get("date")
+            if candidate:
+                token = os.path.splitext(os.path.basename(str(candidate)))[0]
+            else:
+                token = uuid4().hex[:12]
+        if not token.startswith(normalized_test_name):
+            token = f"{normalized_test_name}-{token}"
+        entry["test_id"] = token
+        entry["id"] = token
+
+        status_raw = (entry.get("status") or "").strip().lower()
+        if not status_raw:
+            status_raw = "completed" if entry.get("recording_file") else "pending"
+        if status_raw not in self._STATUS_INDICATORS:
+            status_raw = "pending"
+        entry["status"] = status_raw
+        entry["indicator"] = self._normalize_indicator(status_raw, entry.get("indicator"))
+
+        frame_count = entry.get("frame_count")
+        try:
+            entry["frame_count"] = int(frame_count) if frame_count is not None else None
+        except (TypeError, ValueError):
+            entry["frame_count"] = None
+
+        fps_value = entry.get("fps")
+        try:
+            entry["fps"] = float(fps_value) if fps_value is not None else None
+        except (TypeError, ValueError):
+            entry["fps"] = None
+
+        dtw_data = entry.get("dtw")
+        if isinstance(dtw_data, dict):
+            dtw_clean = {
+                "distance": float(dtw_data.get("distance")) if dtw_data.get("distance") is not None else None,
+                "avg_step_cost": float(dtw_data.get("avg_step_cost")) if dtw_data.get("avg_step_cost") is not None else None,
+                "similarity": float(dtw_data.get("similarity")) if dtw_data.get("similarity") is not None else None,
+                "session_id": dtw_data.get("session_id"),
+                "artifacts_dir": dtw_data.get("artifacts_dir") or dtw_data.get("artifacts"),
+            }
+            entry["dtw"] = dtw_clean
+        else:
+            entry["dtw"] = None
+
+        summary_available = entry.get("summary_available")
+        if summary_available is None:
+            entry["summary_available"] = bool(entry.get("recording_file"))
+        else:
+            entry["summary_available"] = bool(summary_available)
+
+        return entry
+
     def get_patient_tests(self, patient_id: str):
-        return self.data.get(patient_id, [])
+        with self._lock:
+            self._load()
+            raw_entries = self.data.get(patient_id, [])
+            normalized_entries = [self._normalize_entry(patient_id, entry) for entry in raw_entries]
+            normalized_entries.sort(key=lambda item: Patient._parse_iso_datetime(item.get("date")), reverse=True)
+            if raw_entries != normalized_entries:
+                self.data[patient_id] = [dict(entry) for entry in normalized_entries]
+                self._save()
+            return normalized_entries
 
     def add_patient_test(self, patient_id: str, test_data: dict):
         with self._lock:
             self._load()
-            if patient_id not in self.data:
-                self.data[patient_id] = []
-            self.data[patient_id].append(test_data)
+            normalized_entry = self._normalize_entry(patient_id, test_data)
+            patient_tests = self.data.setdefault(patient_id, [])
+            patient_tests.append(dict(normalized_entry))
             self._save()
+            return normalized_entry
 
     def get_all_tests(self):
-        return self.data
+        with self._lock:
+            self._load()
+            changed = False
+            all_tests: Dict[str, List[Dict]] = {}
+            for pid, entries in self.data.items():
+                normalized = [self._normalize_entry(pid, entry) for entry in entries]
+                normalized.sort(key=lambda item: Patient._parse_iso_datetime(item.get("date")), reverse=True)
+                all_tests[pid] = normalized
+                if entries != normalized:
+                    self.data[pid] = [dict(entry) for entry in normalized]
+                    changed = True
+            if changed:
+                self._save()
+            return all_tests

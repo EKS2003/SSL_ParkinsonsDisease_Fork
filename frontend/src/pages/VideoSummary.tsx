@@ -572,7 +572,8 @@ const VideoSummary = () => {
                   <SelectContent>
                     <SelectItem value="all">All Tests</SelectItem>
                     <SelectItem value="stand-and-sit">Stand & Sit</SelectItem>
-                    <SelectItem value="palm-open">Palm Open</SelectItem>
+                    <SelectItem value="finger-tapping">Finger Tapping</SelectItem>
+                    <SelectItem value="fist-open-close">Fist Open & Close</SelectItem>
                   </SelectContent>
                 </Select>
               </CardTitle>
