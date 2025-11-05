@@ -350,53 +350,60 @@ class TestHistoryManager:
     """
 
     def __init__(self) -> None:
-        pass  # no file-path needed
+        pass
 
     def get_patient_tests(self, patient_id: str) -> List[Dict[str, Any]]:
         with SessionLocal() as session:
             trepo = TestResultRepository(session)
-            results = trepo.list_test_results(patient_id)
-            # Map to a simple dict similar to your old JSON structure
+            results = trepo.get_by_patient(patient_id)
             out: List[Dict[str, Any]] = []
             for r in results:
                 out.append({
                     "test_id": r.test_id,
                     "patient_id": r.patient_id,
-                    "test_type": r.test_type,
+                    "test_name": r.test_name,
                     "test_date": r.test_date.isoformat() if r.test_date else None,
-                    "keypoints": r.keypoints,  # raw JSON/text as stored
+                    "recording_file": r.recording_file,
+                    "frame_count": r.frame_count,
+                    "keypoints": r.keypoints,
                 })
             return out
 
     def add_patient_test(self, patient_id: str, test_data: Dict[str, Any]) -> Dict[str, Any]:
         with SessionLocal() as session:
             trepo = TestResultRepository(session)
-            new_tr = trepo.add_test_result(
+
+            # parse date if sent as ISO string
+            raw_dt = test_data.get("test_date")
+            parsed_dt = None
+            if raw_dt:
+                parsed_dt = datetime.fromisoformat(raw_dt)
+
+            from repo.sql_models import TestResult
+            new_test = TestResult(
                 patient_id=patient_id,
-                test_type=test_data.get("test_type"),
-                test_date=date.fromisoformat(test_data["test_date"]) if test_data.get("test_date") else None,
+                test_name=test_data.get("test_name"),
+                test_date=parsed_dt,
+                recording_file=test_data.get("recording_file"),
+                frame_count=test_data.get("frame_count"),
                 keypoints=test_data.get("keypoints"),
             )
-            return {
-                "success": True,
-                "test_id": new_tr.test_id,
-            }
+            new_test = trepo.add(new_test)
+            return {"success": True, "test_id": new_test.test_id}
 
     def get_all_tests(self) -> Dict[str, List[Dict[str, Any]]]:
-        """
-        Returns {patient_id: [tests...]} for convenience.
-        """
         with SessionLocal() as session:
             trepo = TestResultRepository(session)
-            # If your repo has a list_all() use it, else query directly:
-            results = trepo.list_all() if hasattr(trepo, "list_all") else session.query(trepo.model).all()
+            results = trepo.list()
             by_pid: Dict[str, List[Dict[str, Any]]] = {}
             for r in results:
                 by_pid.setdefault(r.patient_id, []).append({
                     "test_id": r.test_id,
                     "patient_id": r.patient_id,
-                    "test_type": r.test_type,
+                    "test_name": r.test_name,
                     "test_date": r.test_date.isoformat() if r.test_date else None,
+                    "recording_file": r.recording_file,
+                    "frame_count": r.frame_count,
                     "keypoints": r.keypoints,
                 })
             return by_pid

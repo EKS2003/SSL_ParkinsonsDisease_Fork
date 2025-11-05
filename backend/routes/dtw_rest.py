@@ -302,13 +302,7 @@ def get_channel_series(
         }
     }
 
-def _downsample(arr_x: np.ndarray, arr_y: np.ndarray, kmax: int):
-    n = int(len(arr_x))
-    if n <= kmax:
-        return arr_x.astype(int).tolist(), arr_y.astype(float).tolist()
-    step = max(1, n // kmax)
-    return arr_x[::step].astype(int).tolist(), arr_y[::step].astype(float).tolist()
-
+   
 # --- Aggregate one axis across many (or all) landmarks into a 1D series ---
 @router.get("/sessions/{test_name}/{session_id}/axis_agg")
 def get_axis_aggregate(

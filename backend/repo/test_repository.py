@@ -1,29 +1,33 @@
 from typing import Optional, List, Dict, Any
-from sqlalchemy.orm import Session
-from repo.sql_models import TestResult  # <-- this should map to your testresults table
 from datetime import date
+from sqlalchemy.orm import Session
+from repo.sql_models import TestResult
+
 
 class TestResultRepository:
     def __init__(self, session: Session) -> None:
         self.session = session
 
     def get(self, test_id: int) -> Optional[TestResult]:
-        # primary key lookup
         return self.session.get(TestResult, test_id)
 
     def add(self, test: TestResult) -> TestResult:
         self.session.add(test)
         self.session.commit()
+        self.session.refresh(test)
         return test
 
     def update(self, test_id: int, update_data: Dict[str, Any]) -> Optional[TestResult]:
         test = self.get(test_id)
         if test is None:
             return None
+
         for key, value in update_data.items():
             if hasattr(test, key):
                 setattr(test, key, value)
+
         self.session.commit()
+        self.session.refresh(test)
         return test
 
     def delete(self, test_id: int) -> bool:
@@ -55,19 +59,16 @@ class TestResultRepository:
     def filter(
         self,
         patient_id: Optional[str] = None,
-        test_type: Optional[str] = None,
+        test_name: Optional[str] = None,
         start_date: Optional[date] = None,
-        end_date: Optional[date] = None
+        end_date: Optional[date] = None,
     ) -> List[TestResult]:
-        """
-        Filter tests by patient, type, and date range.
-        """
         query = self.session.query(TestResult)
 
         if patient_id:
             query = query.filter(TestResult.patient_id == patient_id)
-        if test_type:
-            query = query.filter(TestResult.test_type.ilike(f"%{test_type}%"))
+        if test_name:
+            query = query.filter(TestResult.test_name.ilike(f"%{test_name}%"))
         if start_date:
             query = query.filter(TestResult.test_date >= start_date)
         if end_date:

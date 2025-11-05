@@ -238,6 +238,7 @@ const PatientDetails = () => {
           updatedAt: new Date(),
         });
 
+
         setTests([]);
       } catch (err: any) {
         setError(err.message);

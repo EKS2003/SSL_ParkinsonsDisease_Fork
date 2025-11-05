@@ -65,13 +65,16 @@ class DoctorNote(Base):
 class TestResult(Base):
     __tablename__ = "testresults"
 
-    test_id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    test_id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     patient_id: Mapped[str] = mapped_column(
         String, ForeignKey("patients.patient_id", ondelete="CASCADE"), nullable=False
     )
-    test_type: Mapped[Optional[str]] = mapped_column(String, nullable=True)
-    test_date: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)  # was Date
-    keypoints: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
+    # from JSON
+    test_name: Mapped[Optional[str]] = mapped_column(String, nullable=True)  # "stand-and-sit"
+    test_date: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    recording_file: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    frame_count: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
 
     patient: Mapped["Patient"] = relationship(back_populates="testresults")
 
