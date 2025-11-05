@@ -58,7 +58,7 @@ const mockTestHistory: Test[] = [
     id: 'palm-open',
     patientId: '1',
     name: 'Palm Open Evaluation',
-    type: 'palm-open',
+    type: 'fist-open-close',
     date: new Date('2024-01-18'),
     status: 'completed',
     results: { duration: 30, score: 82, keypoints: [], analysis: 'Good hand dexterity maintained' }
