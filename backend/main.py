@@ -1,24 +1,22 @@
-from fastapi import FastAPI, HTTPException, Query, UploadFile, File, Form, Body, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, HTTPException, Query, UploadFile, File, Form, Body, WebSocket, WebSocketDisconnect, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
-from typing import Dict, List, Optional
-from datetime import datetime
+from typing import Dict, List, Optional, Annotated
+from datetime import datetime, timedelta
 import os
 import shutil
 import uvicorn
 from subprocess import run, PIPE
-import uuid
-import json
-import base64
-import numpy as np
-from uuid import uuid4
+
 from routes.dtw_rest import router as dtw_router
 from routes.patient import router as patient_router
 from routes.websockets import router as ws_router
-
-from pathlib import Path
-
-
+from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
+from repo.sql_models import User
+from repo.db import engine, sessionmaker
+from jose import jwt, JWTError
+from passlib.context import CryptContext
+from patient_manager import SessionLocal
 
 
 # ============ Paths / Folders ============
@@ -56,6 +54,51 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+SECRET_KEY = "stupid_hash_for_now"
+ALGO = "HS256"
+ACCESS_MIN = 30
+
+pwd = CryptContext(schemes=["bcrypt"], deprecated="auto")
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
+
+def authenticate(username: str, password: str) -> User | None:
+    try:
+        with SessionLocal() as session:
+            user = session.query(User).filter_by(username=username).first()
+            if user and pwd.verify(password, user.hashed_password):
+                return user
+    except Exception as e:
+        print(f"Authentication error: {e}")
+        return None
+    
+def create_access_token(sub: str) -> str:
+    to_encode = {
+        "sub": sub, 
+        "exp": datetime.now() + timedelta(minutes=ACCESS_MIN)
+    }
+    return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGO)
+
+async def get_current_user(token: str = Depends(oauth2_scheme)) -> User:
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGO])
+        username: str = payload.get("sub")
+        if username is None:
+            raise HTTPException(status_code=401, detail="Invalid authentication credentials")
+    except JWTError:
+        raise HTTPException(status_code=401, detail="Invalid authentication credentials")   
+    with SessionLocal() as session:
+        user = session.query(User).filter_by(username=username).first()
+        if user is None:
+            raise HTTPException(status_code=401, detail="Invalid authentication credentials")
+        return user
+    
+@app.post("/token")
+async def login(form: OAuth2PasswordRequestForm = Depends):
+    user = authenticate(form.username, form.password)
+    if not user:
+        raise HTTPException(status_code=401, detail="Incorrect username or password")
+    access_token = create_access_token(sub=user.username)
+    return {"access_token": access_token, "token_type": "bearer"}
 # ============ REST: Health & Patients ============
 @app.get("/")
 async def root():

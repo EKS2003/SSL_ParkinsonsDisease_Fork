@@ -1,32 +1,48 @@
 from datetime import date, datetime
 from typing import List, Dict, Optional
 
-from sqlalchemy import (
-    String,
-    Integer,
-    Date,
-    DateTime,
-    Text,
-    ForeignKey,
-    create_engine,
-)
+from sqlalchemy import String, Integer, DateTime, Text, ForeignKey, create_engine, event, func, Index
+
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship, sessionmaker
 from sqlalchemy.types import JSON
 
-class Base(DeclarativeBase):
-    pass
+class Base(DeclarativeBase): pass
+
+class User(Base):
+    __tablename__ = "users"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    username: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
+    full_name: Mapped[Optional[str]] = mapped_column(String(255))
+    email: Mapped[Optional[str]] = mapped_column(String(320), unique=True)
+    hashed_password: Mapped[str] = mapped_column(String(255), nullable=False)
+
+    # one user -> many patients
+    patients: Mapped[List["Patient"]] = relationship(
+        back_populates="user",
+        cascade="all, delete-orphan",   # deleting a user deletes their patients
+        passive_deletes=True,
+        lazy="selectin",
+    )
 
 class Patient(Base):
     __tablename__ = "patients"
 
-    patient_id: Mapped[str] = mapped_column(String, primary_key=True)
-    name: Mapped[Optional[str]] = mapped_column(String, nullable=True)
-    dob: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)  # keep Date if you truly want date-only
-    height: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
-    weight: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
-    severity: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    patient_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    # owner
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
 
-    # Correct relationships
+    name: Mapped[Optional[str]] = mapped_column(String(255))
+    dob: Mapped[Optional[datetime]] = mapped_column(DateTime)
+    height: Mapped[Optional[int]] = mapped_column(Integer)
+    weight: Mapped[Optional[int]] = mapped_column(Integer)
+    severity: Mapped[Optional[str]] = mapped_column(String(50))
+
+    # many patients -> one user
+    user: Mapped["User"] = relationship(back_populates="patients")
+
+    # children
     labresults: Mapped[List["LabResult"]] = relationship(
         "LabResult", back_populates="patient", cascade="all, delete-orphan", passive_deletes=True
     )
@@ -39,48 +55,54 @@ class Patient(Base):
 
 class LabResult(Base):
     __tablename__ = "labresults"
-
-    lab_id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    patient_id: Mapped[str] = mapped_column(
-        String, ForeignKey("patients.patient_id", ondelete="CASCADE"), nullable=False
-    )
-    result_date: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)  # was Date
-    results: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-
+    lab_id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    patient_id: Mapped[str] = mapped_column(ForeignKey("patients.patient_id", ondelete="CASCADE"), nullable=False, index=True)
+    result_date: Mapped[Optional[datetime]] = mapped_column(DateTime)
+    results: Mapped[Optional[str]] = mapped_column(Text)
     patient: Mapped["Patient"] = relationship(back_populates="labresults")
 
 class DoctorNote(Base):
     __tablename__ = "doctornotes"
-
-    note_id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    patient_id: Mapped[str] = mapped_column(
-        String, ForeignKey("patients.patient_id", ondelete="CASCADE"), nullable=False
-    )
-    note_date: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)  # was Date
-    note: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    added_by: Mapped[Optional[str]] = mapped_column(String, nullable=True)
-
+    note_id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    patient_id: Mapped[str] = mapped_column(ForeignKey("patients.patient_id", ondelete="CASCADE"), nullable=False, index=True)
+    note_date: Mapped[Optional[datetime]] = mapped_column(DateTime)
+    note: Mapped[Optional[str]] = mapped_column(Text)
+    added_by: Mapped[Optional[str]] = mapped_column(String(255))
     patient: Mapped["Patient"] = relationship(back_populates="doctornotes")
 
 class TestResult(Base):
     __tablename__ = "testresults"
-
     test_id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    patient_id: Mapped[str] = mapped_column(
-        String, ForeignKey("patients.patient_id", ondelete="CASCADE"), nullable=False
-    )
-
-    # from JSON
-    test_name: Mapped[Optional[str]] = mapped_column(String, nullable=True)  # "stand-and-sit"
-    test_date: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
-    recording_file: Mapped[Optional[str]] = mapped_column(String, nullable=True)
-    frame_count: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
-
+    patient_id: Mapped[str] = mapped_column(ForeignKey("patients.patient_id", ondelete="CASCADE"), nullable=False, index=True)
+    test_name: Mapped[Optional[str]] = mapped_column(String(100))
+    test_date: Mapped[Optional[datetime]] = mapped_column(DateTime)
+    recording_file: Mapped[Optional[str]] = mapped_column(String(512))
+    frame_count: Mapped[Optional[int]] = mapped_column(Integer)
     patient: Mapped["Patient"] = relationship(back_populates="testresults")
 
+# SQLite FK enforcement
+def _set_sqlite_pragma(dbapi_conn, _):
+    cur = dbapi_conn.cursor()
+    cur.execute("PRAGMA foreign_keys = ON;")
+    cur.close()
+
 if __name__ == "__main__":
-    engine = create_engine("sqlite:///patients.db", echo=True)
+    engine = create_engine("sqlite:///patients.db", echo=True, future=True)
+    if engine.url.get_backend_name() == "sqlite":
+        event.listen(engine, "connect", _set_sqlite_pragma)
     Base.metadata.create_all(engine)
-    Session = sessionmaker(bind=engine)
-    session = Session()
-    print("✅ Tables created successfully!")
+    Session = sessionmaker(bind=engine, expire_on_commit=False)
+
+    # example
+    with Session() as s:
+        u = User(username="doc_amy", full_name="Dr. Amy", email="amy@example.com", hashed_password="***")
+        p = Patient(patient_id="P001", name="John Smith", user=u)  # assign owner
+        s.add_all([u, p])
+        s.commit()
+        # s.query(Patient).filter_by(user_id=u.id).all()
+
+
+
+
+
+
