@@ -9,8 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
 import { Patient } from '@/types/patient';
-import apiService from '@/services/api';
-import { calculateAge } from '@/lib/utils';
+import apiService, { normalizeBirthDate } from '@/services/api';
 
 const PatientForm = () => {
   const navigate = useNavigate();
@@ -34,6 +33,11 @@ const PatientForm = () => {
   const [loading, setLoading] = useState(false);
 
   const handleInputChange = (field: string, value: string) => {
+    if (field === 'birthDate') {
+      const normalized = normalizeBirthDate(value);
+      setFormData(prev => ({ ...prev, [field]: normalized || value }));
+      return;
+    }
     setFormData(prev => ({ ...prev, [field]: value }));
   };
 
@@ -53,7 +57,7 @@ const PatientForm = () => {
           firstName: patient.firstName,
           lastName: patient.lastName,
           recordNumber: patient.recordNumber,
-          birthDate: patient.birthDate,
+          birthDate: normalizeBirthDate(patient.birthDate) || patient.birthDate.toString(),
           height: patient.height,
           weight: patient.weight,
           labResults: patient.labResults,
@@ -85,11 +89,22 @@ const PatientForm = () => {
     }
 
     try {
+      const normalizedBirthDate = normalizeBirthDate(formData.birthDate);
+      if (!normalizedBirthDate) {
+        toast({
+          title: "Invalid Birthdate",
+          description: "Enter a valid date (e.g., 1980-05-12 or 05/12/1980).",
+          variant: "destructive",
+        });
+        setLoading(false);
+        return;
+      }
+
       const patientData = {
         firstName: formData.firstName,
         lastName: formData.lastName,
         recordNumber: formData.recordNumber,
-        birthDate: (formData.birthDate) || 'MM/DD/YYYY',
+        birthDate: normalizedBirthDate,
         height: formData.height || '170 cm',
         weight: formData.weight || '70 kg',
         labResults: formData.labResults || '{}',
@@ -212,11 +227,11 @@ const PatientForm = () => {
                   </div>
 
                   <div className="space-y-2">
-                    <Label htmlFor="birthDate">Birth Date *</Label>
+                    <Label htmlFor="birthDate">Birthdate *</Label>
                     <Input
                       id="birthDate"
                       type="date"
-                      placeholder="Enter Birth Date"
+                      placeholder="YYYY-MM-DD"
                       value={formData.birthDate}
                       onChange={(e) => handleInputChange('birthDate', e.target.value)}
                       required

@@ -58,7 +58,7 @@ const mockTestHistory: Test[] = [
     id: 'palm-open',
     patientId: '1',
     name: 'Palm Open Evaluation',
-    type: 'palm-open',
+    type: 'fist-open-close',
     date: new Date('2024-01-18'),
     status: 'completed',
     results: { duration: 30, score: 82, keypoints: [], analysis: 'Good hand dexterity maintained' }
@@ -512,13 +512,27 @@ const VideoSummary = () => {
             </CardHeader>
             <CardContent className="space-y-4">
               {selectedVideo ? (
-                <video controls className="w-full rounded-lg aspect-video">
-                  <source src={`/api/recordings/${selectedVideo}`} type="video/mp4" />
-                  Your browser does not support the video tag.
-                </video>
+                <>
+                  <video controls className="w-full rounded-lg aspect-video">
+                    <source
+                      src={`/api/recordings/${selectedVideo}`}
+                      type={
+                        selectedVideo.endsWith('.webm')
+                          ? 'video/webm'
+                          : selectedVideo.endsWith('.mp4')
+                          ? 'video/mp4'
+                          : 'video/quicktime'
+                      }
+                    />
+                    Your browser does not support the video tag.
+                  </video>
+                  <div className="text-xs text-muted-foreground mt-2">
+                    Files are stored on the server under <code>backend/recordings</code>.
+                  </div>
+                </>
               ) : (
                 <div className="bg-gray-900 text-white text-center py-10 rounded-lg">
-                  No video available.
+                  No video available. Recordings are saved under <code>backend/recordings</code> with the patient and test name.
                 </div>
               )}
               {videoList.length > 1 && (
@@ -558,7 +572,8 @@ const VideoSummary = () => {
                   <SelectContent>
                     <SelectItem value="all">All Tests</SelectItem>
                     <SelectItem value="stand-and-sit">Stand & Sit</SelectItem>
-                    <SelectItem value="palm-open">Palm Open</SelectItem>
+                    <SelectItem value="finger-tapping">Finger Tapping</SelectItem>
+                    <SelectItem value="fist-open-close">Fist Open & Close</SelectItem>
                   </SelectContent>
                 </Select>
               </CardTitle>
