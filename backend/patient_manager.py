@@ -12,6 +12,11 @@ from sqlalchemy.orm import Session
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, Session
 from fastapi import HTTPException as HttpException
+from datetime import datetime, timezone
+from typing import Any, Dict, List, Optional, Union
+import threading
+import copy
+from uuid import uuid4
 
 # --- your models & repos ---
 from repo.sql_models import Base, Patient, LabResult, DoctorNote  # Visit, TestResult defined there as well
@@ -76,11 +81,7 @@ def _validate(data: Dict[str, Any]) -> Dict[str, str]:
         s = str(data["severity"]).strip()
         if s.lower() in {"low", "medium", "high"} or re.fullmatch(r"Stage [1-5]", s):
             pass
-from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional, Union
-import threading
-import copy
-from uuid import uuid4
+
 _TEST_NAME_ALIASES = {
     "stand-and-sit": "stand-and-sit",
     "stand-sit": "stand-and-sit",
@@ -144,259 +145,6 @@ def normalize_severity(value: str) -> str:
 
     return legacy_map.get(normalized, "Stage 1")
 
-TEST_HISTORY_FILE = os.path.join(os.path.dirname(__file__), 'test_history.json')
-
-class Patient:
-    def __init__(self,
-                 name: str,
-                 birthDate: str,
-                 height: float,
-                 weight: float,
-                 severity: str = "low",
-                 patient_id: str = None,
-                 lab_results_history: Optional[List[Dict]] = None,
-                 doctors_notes_history: Optional[List[Dict]] = None):
-        self.name = name
-        self.birthDate = birthDate
-        self.height = height  # in cm
-        self.weight = weight  # in kg
-        self.severity = normalize_severity(severity)
-        self.patient_id = patient_id or self._generate_id()
-        self.lab_results_history = self._normalize_lab_history_entries(lab_results_history or [])
-        self.doctors_notes_history = self._normalize_doctor_notes_history_entries(doctors_notes_history or [])
-
-    @staticmethod
-    def _normalize_date_value(value: Union[str, datetime, None]) -> str:
-        """Return an ISO-8601 string for the provided value."""
-        if isinstance(value, datetime):
-            dt = value
-            if dt.tzinfo is None:
-                dt = dt.replace(tzinfo=timezone.utc)
-            return dt.isoformat()
-        if isinstance(value, str) and value:
-            try:
-                parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
-                if parsed.tzinfo is None:
-                    parsed = parsed.replace(tzinfo=timezone.utc)
-                return parsed.isoformat()
-            except ValueError:
-                return value
-        return datetime.utcnow().replace(tzinfo=timezone.utc).isoformat()
-
-    @staticmethod
-    def _normalize_lab_history_entries(entries: List[Dict]) -> List[Dict]:
-        normalized: List[Dict] = []
-        for entry in entries:
-            if not isinstance(entry, dict):
-                continue
-            normalized.append({
-                "id": str(entry.get("id") or f"lab_{uuid4().hex[:12]}").strip(),
-                "date": Patient._normalize_date_value(entry.get("date")),
-                "results": str(entry.get("results") or entry.get("result") or ""),
-                "added_by": (entry.get("added_by") or entry.get("addedBy") or "Unknown").strip() or "Unknown"
-            })
-        return normalized
-
-    @staticmethod
-    def _normalize_doctor_notes_history_entries(entries: List[Dict]) -> List[Dict]:
-        normalized: List[Dict] = []
-        for entry in entries:
-            if not isinstance(entry, dict):
-                continue
-            normalized.append({
-                "id": str(entry.get("id") or f"note_{uuid4().hex[:12]}").strip(),
-                "date": Patient._normalize_date_value(entry.get("date")),
-                "note": str(entry.get("note") or entry.get("notes") or ""),
-                "added_by": (entry.get("added_by") or entry.get("addedBy") or "Unknown").strip() or "Unknown"
-            })
-        return normalized
-
-    @staticmethod
-    def _parse_iso_datetime(value: Optional[str]) -> datetime:
-        if not value:
-            return datetime.min.replace(tzinfo=timezone.utc)
-        try:
-            parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
-            if parsed.tzinfo is None:
-                parsed = parsed.replace(tzinfo=timezone.utc)
-            return parsed
-        except ValueError:
-            return datetime.min.replace(tzinfo=timezone.utc)
-
-    def latest_lab_result(self) -> Optional[Dict]:
-        if not self.lab_results_history:
-            return None
-        latest = max(self.lab_results_history, key=lambda entry: self._parse_iso_datetime(entry.get("date")))
-        return copy.deepcopy(latest)
-
-    def latest_doctor_note(self) -> Optional[Dict]:
-        if not self.doctors_notes_history:
-            return None
-        latest = max(self.doctors_notes_history, key=lambda entry: self._parse_iso_datetime(entry.get("date")))
-        return copy.deepcopy(latest)
-
-    def _generate_id(self) -> str:
-        """Generate a unique ID for the patient based on name and current timestamp"""
-        name_part = self.name.lower().replace(" ", "")[:5]
-        time_part = str(int(datetime.now().timestamp()))
-        return f"{name_part}{time_part}"
-
-    def to_dict(self) -> Dict:
-        """Convert patient object to dictionary for JSON serialization"""
-        lab_history = [dict(entry) for entry in self.lab_results_history]
-        note_history = [dict(entry) for entry in self.doctors_notes_history]
-        latest_lab = self.latest_lab_result()
-        latest_note = self.latest_doctor_note()
-        return {
-            "patient_id": self.patient_id,
-            "name": self.name,
-            "birthDate": self.birthDate,
-            "height": str(self.height),  # Convert to string for API response
-            "weight": str(self.weight),  # Convert to string for API response
-            "severity": self.severity,
-            "lab_results_history": lab_history,
-            "doctors_notes_history": note_history,
-            "latest_lab_result": latest_lab,
-            "latest_doctor_note": latest_note
-        }
-
-    @classmethod
-    def from_dict(cls, data: Dict) -> 'Patient':
-        """Create a Patient object from dictionary data"""
-        # Handle height conversion from string to float
-        height_raw = data.get("height", 0.0)
-        if isinstance(height_raw, str):
-            # Try to extract numeric value from strings like "5'8"" or "170 cm"
-            try:
-                # Remove common units and extract numbers
-                height_str = str(height_raw).replace("'", "").replace('"', "").replace("cm", "").replace("lbs", "").strip()
-                height = float(height_str) if height_str else 0.0
-            except ValueError:
-                height = 0.0
-        else:
-            height = float(height_raw) if height_raw is not None else 0.0
-        
-        # Handle weight conversion from string to float
-        weight_raw = data.get("weight", 0.0)
-        if isinstance(weight_raw, str):
-            # Try to extract numeric value from strings like "145 lbs" or "70 kg"
-            try:
-                # Remove common units and extract numbers
-                weight_str = str(weight_raw).replace("lbs", "").replace("kg", "").strip()
-                weight = float(weight_str) if weight_str else 0.0
-            except ValueError:
-                weight = 0.0
-        else:
-            weight = float(weight_raw) if weight_raw is not None else 0.0
-        
-        lab_history = data.get("lab_results_history", []) or []
-        note_history = data.get("doctors_notes_history", []) or []
-
-        legacy_lab = data.get("lab_results")
-        if legacy_lab:
-            lab_history = cls._merge_legacy_lab_results(lab_history, legacy_lab, data)
-
-        legacy_notes = data.get("doctors_notes")
-        if legacy_notes:
-            note_history = cls._merge_legacy_doctor_notes(note_history, legacy_notes, data)
-
-        return cls(
-            patient_id=data.get("patient_id"),
-            name=data.get("name", ""),
-            birthDate=data.get("birthDate", ""),
-            height=height,
-            weight=weight,
-            severity=normalize_severity(data.get("severity", "Stage 1")),
-            lab_results_history=lab_history,
-            doctors_notes_history=note_history
-        )
-
-    @staticmethod
-    def _merge_legacy_lab_results(history: List[Dict], legacy_value: Union[Dict, str], data: Dict) -> List[Dict]:
-        history_copy = list(history or [])
-        if isinstance(legacy_value, dict) and not legacy_value:
-            return history_copy
-        if isinstance(legacy_value, str) and not legacy_value.strip():
-            return history_copy
-
-        legacy_id = f"legacy_lab_{data.get('patient_id', 'unknown')}"
-        if any(entry.get("id") == legacy_id for entry in history_copy):
-            return history_copy
-
-        if isinstance(legacy_value, dict):
-            results_value = json.dumps(legacy_value, indent=2)
-        else:
-            results_value = str(legacy_value)
-
-        if not results_value.strip():
-            return history_copy
-
-        history_copy.append({
-            "id": legacy_id,
-            "date": Patient._normalize_date_value(data.get("last_lab_update")),
-            "results": results_value,
-            "added_by": data.get("last_updated_by", "Legacy Import")
-        })
-        return history_copy
-
-    @staticmethod
-    def _merge_legacy_doctor_notes(history: List[Dict], legacy_value: str, data: Dict) -> List[Dict]:
-        history_copy = list(history or [])
-        if not legacy_value or not str(legacy_value).strip():
-            return history_copy
-
-        legacy_id = f"legacy_note_{data.get('patient_id', 'unknown')}"
-        if any(entry.get("id") == legacy_id for entry in history_copy):
-            return history_copy
-
-        history_copy.append({
-            "id": legacy_id,
-            "date": Patient._normalize_date_value(data.get("last_doctor_note_date")),
-            "note": str(legacy_value),
-            "added_by": data.get("last_updated_by", "Legacy Import")
-        })
-        return history_copy
-
-
-#Refacto to sqlite
-class PatientManager:
-    # Class lock for async operations
-    _lock = asyncio.Lock()
-
-    def __init__(self, file_path: str = "patients.json", verbose: bool = False):
-        self.file_path = file_path
-        self.patients: Dict[str, Patient] = {}
-        self.verbose = verbose
-        self._load_patients()
-
-    def _log(self, message: str) -> None:
-        """Log a message if verbose mode is enabled"""
-        if self.verbose:
-            print(message)
-
-    def _load_patients(self) -> None:
-        """Load patients from the JSON file if it exists"""
-        if os.path.exists(self.file_path):
-            try:
-                with open(self.file_path, 'r') as f:
-                    patients_data = json.load(f)
-
-                for patient_id, patient_data in patients_data.items():
-                    self.patients[patient_id] = Patient.from_dict(patient_data)
-
-                self._log(f"Loaded {len(self.patients)} patients from {self.file_path}")
-            except Exception as e:
-                self._log(f"Error loading patients: {str(e)}")
-        else:
-            errors["severity"] = f"Severity must be one of: low, medium, high, or Stage 1..5{s}"
-
-    return errors
-
-def _iso(dt: Optional[datetime | date]) -> Optional[str]:
-    if not dt: return None
-    # datetime/date both have isoformat()
-    return dt.isoformat()
-
 def _patient_to_api_dict(session: Session, p: Patient) -> Dict[str, Any]:
     prepo = PatientRepository(session)
     labs = sorted(prepo.list_lab_results(p.patient_id), key=lambda r: (r.result_date or date.min, r.lab_id))
@@ -417,11 +165,6 @@ def _patient_to_api_dict(session: Session, p: Patient) -> Dict[str, Any]:
         "lab_results_history": [LabResultOut.model_validate(x) for x in labs],
         "doctors_notes_history": [DoctorNoteOut.model_validate(x) for x in notes],
     }
-# Legacy public API (same names/signatures)
-# =========================
-
-from datetime import date, datetime
-from typing import Union, Dict, Any, Optional
 
 def create_patient(
     name: str,
@@ -682,21 +425,12 @@ class TestHistoryManager:
         },
     }
 
-    def __init__(self, file_path: str = TEST_HISTORY_FILE):
-        self.file_path = file_path
-        self._load()
 
-    def _load(self):
-        if os.path.exists(self.file_path):
-            with open(self.file_path, 'r') as f:
-                self.data = json.load(f)
-        else:
-            self.data = {}
+    def __init__(self) -> None:
+        pass
 
-    def _save(self):
-        with open(self.file_path, 'w') as f:
-            json.dump(self.data, f, indent=2)
 
+ 
     def _default_display_name(self, test_name: str) -> str:
         if not test_name:
             return "Unknown Test"
@@ -789,48 +523,6 @@ class TestHistoryManager:
             entry["summary_available"] = bool(summary_available)
 
         return entry
-
-    def get_patient_tests(self, patient_id: str):
-        with self._lock:
-            self._load()
-            raw_entries = self.data.get(patient_id, [])
-            normalized_entries = [self._normalize_entry(patient_id, entry) for entry in raw_entries]
-            normalized_entries.sort(key=lambda item: Patient._parse_iso_datetime(item.get("date")), reverse=True)
-            if raw_entries != normalized_entries:
-                self.data[patient_id] = [dict(entry) for entry in normalized_entries]
-                self._save()
-            return normalized_entries
-
-    def add_patient_test(self, patient_id: str, test_data: dict):
-        with self._lock:
-            self._load()
-            normalized_entry = self._normalize_entry(patient_id, test_data)
-            patient_tests = self.data.setdefault(patient_id, [])
-            patient_tests.append(dict(normalized_entry))
-            self._save()
-            return normalized_entry
-
-    def get_all_tests(self):
-        with self._lock:
-            self._load()
-            changed = False
-            all_tests: Dict[str, List[Dict]] = {}
-            for pid, entries in self.data.items():
-                normalized = [self._normalize_entry(pid, entry) for entry in entries]
-                normalized.sort(key=lambda item: Patient._parse_iso_datetime(item.get("date")), reverse=True)
-                all_tests[pid] = normalized
-                if entries != normalized:
-                    self.data[pid] = [dict(entry) for entry in normalized]
-                    changed = True
-            if changed:
-                self._save()
-            return all_tests
-    """
-    Backed by TestResultRepository instead of a JSON file.
-    """
-
-    def __init__(self) -> None:
-        pass
 
     def get_patient_tests(self, patient_id: str) -> List[Dict[str, Any]]:
         with SessionLocal() as session:
