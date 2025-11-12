@@ -1,21 +1,15 @@
-import { useState, useEffect } from "react";
-import { useNavigate, useParams, Link } from "react-router-dom";
-import { ArrowLeft, Save, User, Loader2 } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { useToast } from "@/hooks/use-toast";
-import { Patient } from "@/types/patient";
-import apiService from "@/services/api";
+import { useState, useEffect } from 'react';
+import { useNavigate, useParams, Link } from 'react-router-dom';
+import { ArrowLeft, Save, User, Loader2 } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { useToast } from '@/hooks/use-toast';
+import { Patient } from '@/types/patient';
+import apiService, { normalizeBirthDate } from '@/services/api';
 
 const PatientForm = () => {
   const navigate = useNavigate();
@@ -37,7 +31,12 @@ const PatientForm = () => {
   const [loading, setLoading] = useState(false);
 
   const handleInputChange = (field: string, value: string) => {
-    setFormData((prev) => ({ ...prev, [field]: value }));
+    if (field === 'birthDate') {
+      const normalized = normalizeBirthDate(value);
+      setFormData(prev => ({ ...prev, [field]: normalized || value }));
+      return;
+    }
+    setFormData(prev => ({ ...prev, [field]: value }));
   };
 
   // Load patient data if editing
@@ -56,7 +55,7 @@ const PatientForm = () => {
           firstName: patient.firstName,
           lastName: patient.lastName,
           recordNumber: patient.recordNumber,
-          birthDate: patient.birthDate,
+          birthDate: normalizeBirthDate(patient.birthDate) || patient.birthDate.toString(),
           height: patient.height,
           weight: patient.weight,
           labResults: patient.labResults,
@@ -94,15 +93,26 @@ const PatientForm = () => {
     }
 
     try {
+      const normalizedBirthDate = normalizeBirthDate(formData.birthDate);
+      if (!normalizedBirthDate) {
+        toast({
+          title: "Invalid Birthdate",
+          description: "Enter a valid date (e.g., 1980-05-12 or 05/12/1980).",
+          variant: "destructive",
+        });
+        setLoading(false);
+        return;
+      }
+
       const patientData = {
         firstName: formData.firstName,
         lastName: formData.lastName,
         recordNumber: formData.recordNumber,
-        birthDate: formData.birthDate,
-        height: formData.height || "170 cm",
-        weight: formData.weight || "70 kg",
-        labResults: formData.labResults || "",
-        doctorNotes: formData.doctorNotes || "",
+        birthDate: normalizedBirthDate,
+        height: formData.height || '170 cm',
+        weight: formData.weight || '70 kg',
+        labResults: formData.labResults || '{}',
+        doctorNotes: formData.doctorNotes || '',
         severity: formData.severity,
         createdAt: new Date(),
         updatedAt: new Date(),
@@ -229,15 +239,14 @@ const PatientForm = () => {
                   </div>
 
                   <div className="space-y-2">
-                    <Label htmlFor="birthDate">BirthDate *</Label>
+                    <Label htmlFor="birthDate">Birthdate *</Label>
                     <Input
                       id="birthDate"
                       type="date"
-                      placeholder="Enter Birth Date"
+                      placeholder="YYYY-MM-DD"
                       value={formData.birthDate}
-                      onChange={(e) =>
-                        handleInputChange("birthDate", e.target.value)
-                      } // <-- keep full "YYYY-MM-DD"
+                      onChange={(e) => handleInputChange('birthDate', e.target.value)}
+                      required
                     />
                   </div>
 

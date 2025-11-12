@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { ArrowLeft, Play, FileText, Activity, Video, Upload } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -6,9 +6,32 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { useToast } from '@/hooks/use-toast';
-import { Patient, Test, AVAILABLE_TESTS } from '@/types/patient';
+import { Patient, Test, AVAILABLE_TESTS, TestIndicator } from '@/types/patient';
 import apiService from '@/services/api';
 import { getSeverityColor, calculateAge } from '@/lib/utils';
+import { Input } from '@/components/ui/input';
+
+const indicatorBadgeClasses: Record<TestIndicator['color'], string> = {
+  success: 'bg-success text-success-foreground',
+  warning: 'bg-warning text-warning-foreground',
+  destructive: 'bg-destructive text-destructive-foreground',
+  muted: 'bg-muted text-muted-foreground',
+};
+
+const testTypeStyles: Record<Test['type'], { container: string; badge: string }> = {
+  'stand-and-sit': {
+    container: 'border-l-4 border-l-emerald-500/80 bg-emerald-50/40',
+    badge: 'border border-emerald-200 bg-emerald-100 text-emerald-700',
+  },
+  'finger-tapping': {
+    container: 'border-l-4 border-l-sky-500/80 bg-sky-50/40',
+    badge: 'border border-sky-200 bg-sky-100 text-sky-700',
+  },
+  'fist-open-close': {
+    container: 'border-l-4 border-l-amber-500/80 bg-amber-50/40',
+    badge: 'border border-amber-200 bg-amber-100 text-amber-700',
+  },
+};
 
 const TestSelection = () => {
   const { id } = useParams<{ id: string }>();
@@ -20,6 +43,27 @@ const TestSelection = () => {
   const [loading, setLoading] = useState(false);
   const [loadingPatient, setLoadingPatient] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [testSearch, setTestSearch] = useState('');
+  const sortedHistory = useMemo(
+    () => [...testHistory].sort((a, b) => b.date.getTime() - a.date.getTime()),
+    [testHistory]
+  );
+  const filteredHistory = useMemo(() => {
+    const query = testSearch.trim().toLowerCase();
+    if (!query) return sortedHistory;
+    return sortedHistory.filter((test) => {
+      const haystack = [
+        test.name,
+        test.type,
+        test.indicator?.label,
+        test.recordingFile,
+        test.recordingUrl,
+      ]
+        .filter(Boolean)
+        .map((value) => String(value).toLowerCase());
+      return haystack.some((value) => value.includes(query));
+    });
+  }, [sortedHistory, testSearch]);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -133,23 +177,27 @@ const TestSelection = () => {
                 <CardTitle>Patient Summary</CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div>
-                  <p className="text-sm font-medium text-muted-foreground">Name</p>
-                  <p className="font-semibold">{patient.firstName} {patient.lastName}</p>
+                <div className="flex flex-wrap gap-x-8 gap-y-3">
+                  <div className="space-y-1 min-w-[140px]">
+                    <p className="text-sm font-medium text-muted-foreground">Name</p>
+                    <p className="font-semibold">{patient.firstName} {patient.lastName}</p>
+                  </div>
+                  <div className="space-y-1 min-w-[140px]">
+                    <p className="text-sm font-medium text-muted-foreground">Age</p>
+                    <p className="font-semibold">{calculateAge(patient.birthDate)} years</p>
+                  </div>
                 </div>
-                <div>
-                  <p className="text-sm font-medium text-muted-foreground">Age</p>
-                  <p className="font-semibold">{calculateAge(patient.birthDate)} years</p>
-                </div>
-                <div>
-                  <p className="text-sm font-medium text-muted-foreground">Record Number</p>
-                  <p className="font-semibold">{patient.recordNumber}</p>
-                </div>
-                <div>
-                  <p className="text-sm font-medium text-muted-foreground">Severity</p>
-                  <Badge className={getSeverityColor(patient.severity)} variant="secondary">
-                    {patient.severity}
-                  </Badge>
+                <div className="flex flex-wrap items-start gap-x-8 gap-y-3">
+                  <div className="space-y-1 min-w-[140px]">
+                    <p className="text-sm font-medium text-muted-foreground">Record Number</p>
+                    <p className="font-semibold">{patient.recordNumber}</p>
+                  </div>
+                  <div className="space-y-1 min-w-[140px]">
+                    <p className="text-sm font-medium text-muted-foreground">Severity</p>
+                    <Badge className={getSeverityColor(patient.severity)} variant="secondary">
+                      {patient.severity}
+                    </Badge>
+                  </div>
                 </div>
               <Separator />
               <div>
@@ -167,36 +215,95 @@ const TestSelection = () => {
             {/* Test History */}
             <Card>
               <CardHeader>
-                <CardTitle className="flex items-center">
-                  <FileText className="mr-2 h-5 w-5" />
-                  Previous Tests
-                </CardTitle>
+                <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                  <CardTitle className="flex items-center">
+                    <FileText className="mr-2 h-5 w-5" />
+                    Previous Tests
+                  </CardTitle>
+                  <div className="w-full lg:w-72">
+                    <Input
+                      placeholder="Search tests by name or type..."
+                      value={testSearch}
+                      onChange={(event) => setTestSearch(event.target.value)}
+                      className="h-9"
+                    />
+                  </div>
+                </div>
               </CardHeader>
               <CardContent>
-                <div className="space-y-3">
-                  {testHistory.slice(-3).map((test) => (
-                    <div key={test.id} className="border rounded-lg p-3">
-                      <div className="flex justify-between items-start">
-                        <div>
-                          <p className="font-medium text-sm">{test.name}</p>
-                          <p className="text-xs text-muted-foreground">
-                            {test.date ? test.date.toLocaleDateString() : ''}
-                          </p>
-                        </div>
-                        <Badge
-                          variant="secondary"
-                          className={
-                            test.status === 'completed'
-                              ? 'bg-success text-success-foreground'
-                              : ''
-                          }
+                <div className="space-y-3 max-h-[24rem] lg:max-h-[30rem] overflow-y-auto pr-1">
+                  {filteredHistory.length > 0 ? (
+                    filteredHistory.map((test) => {
+                      const badgeVariant = test.indicator ? indicatorBadgeClasses[test.indicator.color] : indicatorBadgeClasses.muted;
+                      const typeStyle = testTypeStyles[test.type] ?? {
+                        container: 'border-l-4 border-l-slate-400/70 bg-muted/40',
+                        badge: 'border border-slate-200 bg-muted text-muted-foreground',
+                      };
+                      const metaPieces: string[] = [];
+                      if (typeof test.frameCount === 'number' && Number.isFinite(test.frameCount)) {
+                        metaPieces.push(`${test.frameCount} frames`);
+                      }
+                      if (typeof test.fps === 'number' && Number.isFinite(test.fps)) {
+                        metaPieces.push(`${test.fps.toFixed(1)} fps`);
+                      }
+                      if (typeof test.similarity === 'number' && Number.isFinite(test.similarity)) {
+                        metaPieces.push(`Similarity ${(test.similarity * 100).toFixed(1)}%`);
+                      }
+
+                      return (
+                        <div
+                          key={test.id}
+                          className={`border rounded-lg p-3 transition-colors ${typeStyle.container}`}
                         >
-                          {test.status}
-                        </Badge>
-                      </div>
-                    </div>
-                  ))}
-                  {testHistory.length === 0 && (
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="space-y-1">
+                              <div className="flex items-center gap-2">
+                                <p className="font-medium text-sm">{test.name}</p>
+                                <Badge
+                                  variant="outline"
+                                  className={`uppercase tracking-wide text-[10px] ${typeStyle.badge}`}
+                                >
+                                  {test.type.replace(/-/g, ' ')}
+                                </Badge>
+                              </div>
+                              <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                                <span>{test.date ? test.date.toLocaleString() : 'Unknown date'}</span>
+                                {metaPieces.map((piece) => (
+                                  <span key={piece} className="inline-flex items-center gap-1">
+                                    <span className="opacity-50">•</span>
+                                    {piece}
+                                  </span>
+                                ))}
+                              </div>
+                            </div>
+                            <Badge variant="secondary" className={badgeVariant}>
+                              {test.indicator?.label ?? test.status}
+                            </Badge>
+                          </div>
+                          <div className="mt-2 flex flex-wrap gap-2">
+                            {test.summaryAvailable && (
+                              <Link to={`/patient/${id}/video-summary/${encodeURIComponent(test.id)}`}>
+                                <Button size="sm" variant="outline">
+                                  View Results
+                                </Button>
+                              </Link>
+                            )}
+                            {test.videoUrl && (
+                              <a href={test.videoUrl} target="_blank" rel="noreferrer">
+                                <Button size="sm" variant="ghost">
+                                  Open Recording
+                                </Button>
+                              </a>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })
+                  ) : testHistory.length > 0 ? (
+                    <p className="text-sm text-muted-foreground text-center py-4">
+                      No tests match "{testSearch}"
+                    </p>
+                  ) : (
                     <p className="text-sm text-muted-foreground text-center py-4">
                       No previous tests recorded
                     </p>
