@@ -19,7 +19,8 @@ import {
   Patient,
   Test,
   LabResultEntry,
-  DoctorNoteEntry, TestIndicator,
+  DoctorNoteEntry,
+  TestIndicator,
 } from "@/types/patient";
 import { getSeverityColor, calculateAge } from "@/lib/utils";
 import apiService, { mapSeverity } from "@/services/api";
@@ -42,33 +43,30 @@ import {
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 
-
-
-
-
-
-const indicatorBadgeClasses: Record<TestIndicator['color'], string> = {
-  success: 'bg-success text-success-foreground',
-  warning: 'bg-warning text-warning-foreground',
-  destructive: 'bg-destructive text-destructive-foreground',
-  muted: 'bg-muted text-muted-foreground',
+const indicatorBadgeClasses: Record<TestIndicator["color"], string> = {
+  success: "bg-success text-success-foreground",
+  warning: "bg-warning text-warning-foreground",
+  destructive: "bg-destructive text-destructive-foreground",
+  muted: "bg-muted text-muted-foreground",
 };
 
-const testTypeStyles: Record<Test['type'], { container: string; badge: string }> = {
-  'stand-and-sit': {
-    container: 'border-l-4 border-l-emerald-500/80 bg-emerald-50/40',
-    badge: 'border border-emerald-200 bg-emerald-100 text-emerald-700',
+const testTypeStyles: Record<
+  Test["type"],
+  { container: string; badge: string }
+> = {
+  "stand-and-sit": {
+    container: "border-l-4 border-l-emerald-500/80 bg-emerald-50/40",
+    badge: "border border-emerald-200 bg-emerald-100 text-emerald-700",
   },
-  'finger-tapping': {
-    container: 'border-l-4 border-l-sky-500/80 bg-sky-50/40',
-    badge: 'border border-sky-200 bg-sky-100 text-sky-700',
+  "finger-tapping": {
+    container: "border-l-4 border-l-sky-500/80 bg-sky-50/40",
+    badge: "border border-sky-200 bg-sky-100 text-sky-700",
   },
-  'fist-open-close': {
-    container: 'border-l-4 border-l-amber-500/80 bg-amber-50/40',
-    badge: 'border border-amber-200 bg-amber-100 text-amber-700',
+  "fist-open-close": {
+    container: "border-l-4 border-l-amber-500/80 bg-amber-50/40",
+    badge: "border border-amber-200 bg-amber-100 text-amber-700",
   },
 };
-
 
 // ---------- Date helpers ----------
 const isValidDate = (d: unknown): d is Date =>
@@ -89,7 +87,7 @@ const PatientDetails = () => {
   const [error, setError] = useState<string | null>(null);
   const [tests, setTests] = useState<Test[]>([]); // Placeholder – replace with real API if available
   const [testsLoading, setTestsLoading] = useState(true);
-  const [testSearch, setTestSearch] = useState('');
+  const [testSearch, setTestSearch] = useState("");
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [editData, setEditData] = useState<Partial<Patient>>({});
   const [isLabResultModalOpen, setIsLabResultModalOpen] = useState(false);
@@ -169,7 +167,14 @@ const PatientDetails = () => {
       const res = await fetch(`http://localhost:8000/patients/${patient.id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ lab_results: { value: newLabResult.trim() } }), // <-- not lab_results_history
+        body: JSON.stringify({
+          lab_results: {
+            id: `lab_${Date.now()}`, // optional, or omit and let backend/DB assign
+            date: new Date().toISOString(),
+            added_by: "Unknown",
+            results: newLabResult.trim(), // <-- plain string, not { value: ... }
+          },
+        }),
       });
       const text = await res.text();
       if (!res.ok) throw new Error(`Save failed ${res.status}: ${text}`);
@@ -216,14 +221,13 @@ const PatientDetails = () => {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          doctors_notes: [
+          doctors_notes: 
             {
               id: newEntry.id,
               date: toISO(newEntry.date),
               note: newEntry.note,
               added_by: newEntry.addedBy ?? null,
             },
-          ],
         }),
       });
       const text = await res.text();
@@ -266,42 +270,51 @@ const PatientDetails = () => {
         console.log("Lab results history:", data?.lab_results_history);
         console.log("Doctor notes history:", data?.doctors_notes_history);
 
-        const [firstName, lastName] = data.patient.name.split(' ');
+        const [firstName, lastName] = data.name.split(" ");
 
-        const labResultsHistory = (data.patient.lab_results_history || []).map((entry: any) => ({
-          id: entry.id,
-          date: new Date(entry.date),
-          results: entry.results,
-          addedBy: entry.added_by,
-        }));
+        const labResultsHistory = (data.lab_results_history || []).map(
+          (entry: any) => ({
+            id: entry.id,
+            date: new Date(entry.date),
+            results: entry.results,
+            addedBy: entry.added_by,
+          })
+        );
 
-        const doctorNotesHistory = (data.patient.doctors_notes_history || []).map((entry: any) => ({
-          id: entry.id,
-          date: new Date(entry.date),
-          note: entry.note,
-          addedBy: entry.added_by,
-        }));
+        const doctorNotesHistory = (data.doctors_notes_history || []).map(
+          (entry: any) => ({
+            id: entry.id,
+            date: new Date(entry.date),
+            note: entry.note,
+            addedBy: entry.added_by,
+          })
+        );
 
-        const latestLabResult = data.patient.latest_lab_result || data.patient.lab_results_history?.[0] || null;
-        const latestDoctorNote = data.patient.latest_doctor_note || data.patient.doctors_notes_history?.[0] || null;
+        const latestLabResult =
+          data.latest_lab_result ||
+          data.patient.lab_results_history?.[0] ||
+          null;
+        const latestDoctorNote =
+          data.latest_doctor_note ||
+          data.patient.doctors_notes_history?.[0] ||
+          null;
 
         setPatient({
-          id: data.patient.patient_id,
-          firstName,
-          lastName,
-          recordNumber: data.patient.patient_id, // Use patient_id as record number
-          birthDate: data.patient.birthDate,
-          height: `${data.patient.height}`,
-          weight: `${data.patient.weight}`,
-          labResults: latestLabResult?.results || '',
-          doctorNotes: latestDoctorNote?.note || '',
+          id: data.patient_id,
+          firstName: firstName,
+          lastName: lastName,
+          recordNumber: data.patient_id, // Use patient_id as record number
+          birthDate: data.birthDate,
+          height: `${data.height}`,
+          weight: `${data.weight}`,
+          labResults: latestLabResult?.results || "",
+          doctorNotes: latestDoctorNote?.note || "",
           labResultsHistory,
           doctorNotesHistory,
-          severity: mapSeverity(data.patient.severity),
+          severity: mapSeverity(data.severity),
           createdAt: new Date(), // Optional: replace with actual timestamps
           updatedAt: new Date(),
         });
-
 
         setTests([]);
       } catch (err: any) {
@@ -331,7 +344,7 @@ const PatientDetails = () => {
         }
       } catch (err) {
         if (!cancelled) {
-          console.error('Error fetching test history:', err);
+          console.error("Error fetching test history:", err);
           setTests([]);
         }
       } finally {
@@ -591,17 +604,30 @@ const PatientDetails = () => {
                     </div>
                   ) : filteredTests.length > 0 ? (
                     filteredTests.map((test) => {
-                      const badgeVariant = test.indicator ? indicatorBadgeClasses[test.indicator.color] : indicatorBadgeClasses.muted;
+                      const badgeVariant = test.indicator
+                        ? indicatorBadgeClasses[test.indicator.color]
+                        : indicatorBadgeClasses.muted;
                       const typeStyle = testTypeStyles[test.type];
                       const metaPieces: string[] = [];
-                      if (typeof test.frameCount === 'number' && Number.isFinite(test.frameCount)) {
+                      if (
+                        typeof test.frameCount === "number" &&
+                        Number.isFinite(test.frameCount)
+                      ) {
                         metaPieces.push(`${test.frameCount} frames`);
                       }
-                      if (typeof test.fps === 'number' && Number.isFinite(test.fps)) {
+                      if (
+                        typeof test.fps === "number" &&
+                        Number.isFinite(test.fps)
+                      ) {
                         metaPieces.push(`${test.fps.toFixed(1)} fps`);
                       }
-                      if (typeof test.similarity === 'number' && Number.isFinite(test.similarity)) {
-                        metaPieces.push(`Similarity ${(test.similarity * 100).toFixed(1)}%`);
+                      if (
+                        typeof test.similarity === "number" &&
+                        Number.isFinite(test.similarity)
+                      ) {
+                        metaPieces.push(
+                          `Similarity ${(test.similarity * 100).toFixed(1)}%`
+                        );
                       }
 
                       return (
@@ -612,21 +638,28 @@ const PatientDetails = () => {
                           <div className="flex items-start justify-between gap-3">
                             <div className="space-y-1">
                               <div className="flex items-center gap-2">
-                                <h4 className="font-medium text-sm">{test.name}</h4>
+                                <h4 className="font-medium text-sm">
+                                  {test.name}
+                                </h4>
                                 <Badge
                                   variant="outline"
                                   className={`uppercase tracking-wide text-[10px] ${typeStyle.badge}`}
                                 >
-                                  {test.type.replace(/-/g, ' ')}
+                                  {test.type.replace(/-/g, " ")}
                                 </Badge>
                               </div>
                               <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
                                 <span className="inline-flex items-center gap-1">
                                   <Calendar className="h-3 w-3" />
-                                  {test.date ? test.date.toLocaleString() : 'Unknown date'}
+                                  {test.date
+                                    ? test.date.toLocaleString()
+                                    : "Unknown date"}
                                 </span>
                                 {metaPieces.map((piece) => (
-                                  <span key={piece} className="inline-flex items-center gap-1">
+                                  <span
+                                    key={piece}
+                                    className="inline-flex items-center gap-1"
+                                  >
                                     <span className="opacity-50">•</span>
                                     {piece}
                                   </span>
@@ -639,16 +672,32 @@ const PatientDetails = () => {
                           </div>
                           <div className="mt-3 flex flex-wrap gap-2">
                             {test.summaryAvailable && (
-                              <Link to={`/patient/${id}/video-summary/${encodeURIComponent(test.id)}`}>
-                                <Button size="sm" variant="outline" className="w-full sm:w-auto">
+                              <Link
+                                to={`/patient/${id}/video-summary/${encodeURIComponent(
+                                  test.id
+                                )}`}
+                              >
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="w-full sm:w-auto"
+                                >
                                   <Play className="mr-2 h-3 w-3" />
                                   View Results
                                 </Button>
                               </Link>
                             )}
                             {test.videoUrl && (
-                              <a href={test.videoUrl} target="_blank" rel="noreferrer">
-                                <Button size="sm" variant="ghost" className="w-full sm:w-auto">
+                              <a
+                                href={test.videoUrl}
+                                target="_blank"
+                                rel="noreferrer"
+                              >
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  className="w-full sm:w-auto"
+                                >
                                   Open Recording
                                 </Button>
                               </a>
@@ -660,7 +709,9 @@ const PatientDetails = () => {
                   ) : tests.length > 0 ? (
                     <div className="text-center py-8">
                       <FileText className="mx-auto h-8 w-8 text-muted-foreground mb-2" />
-                      <p className="text-sm text-muted-foreground">No tests match "{testSearch}"</p>
+                      <p className="text-sm text-muted-foreground">
+                        No tests match "{testSearch}"
+                      </p>
                     </div>
                   ) : (
                     <div className="text-center py-8">

@@ -55,15 +55,17 @@ class Patient(Base):
 
 class LabResult(Base):
     __tablename__ = "labresults"
-    lab_id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    lab_id: Mapped[str] = mapped_column(String, primary_key=True)
     patient_id: Mapped[str] = mapped_column(ForeignKey("patients.patient_id", ondelete="CASCADE"), nullable=False, index=True)
     result_date: Mapped[Optional[datetime]] = mapped_column(DateTime)
     results: Mapped[Optional[str]] = mapped_column(Text)
+    added_by: Mapped[Optional[str]] = mapped_column(String(255))
     patient: Mapped["Patient"] = relationship(back_populates="labresults")
+    
 
 class DoctorNote(Base):
     __tablename__ = "doctornotes"
-    note_id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    note_id: Mapped[str] = mapped_column(String, primary_key=True)
     patient_id: Mapped[str] = mapped_column(ForeignKey("patients.patient_id", ondelete="CASCADE"), nullable=False, index=True)
     note_date: Mapped[Optional[datetime]] = mapped_column(DateTime)
     note: Mapped[Optional[str]] = mapped_column(Text)

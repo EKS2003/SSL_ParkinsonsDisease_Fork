@@ -35,8 +35,8 @@ async def create_patient(patient: PatientCreate):
         birthDate=patient.birthDate,
         height=patient.height,
         weight=patient.weight,
-        lab_results=patient.lab_results_history or "",
-        doctors_notes=patient.doctors_notes_history or "",
+        lab_results_history=patient.lab_results_history or "",
+        doctors_notes_history=patient.doctors_notes_history or "",
         severity=patient.severity,
     )
 
@@ -63,13 +63,7 @@ async def get_patient(patient_id: str):
 
 @router.put("/{patient_id}", response_model=Dict)
 async def update_patient(patient_id: str, patient_update: PatientUpdate):
-    update_data = patient_update.model_dump(exclude_unset=True)
-    if update_data.get("lab_results") == {}:
-        update_data.pop("lab_results")
-    if not update_data:
-        return {"success": True, "patient_id": patient_id}  # no-op instead of 400
-    
-    result = await async_update_patient_info(patient_id, update_data)
+    result = await async_update_patient_info(patient_id, patient_update)
     if not result.get("success"):
         if "errors" in result:
             raise HTTPException(status_code=400, detail=result["errors"])

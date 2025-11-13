@@ -59,14 +59,18 @@ class PatientRepository:
     #----------------- Add Lab Results & Doctor Notes ----------------
     def add_lab_result(
         self,
+        lab_id: str,
         patient_id: str,
         result_date: date | None,
         results: str | None,
+        added_by:str | None,
     ) -> LabResult:
         lr = LabResult(
+            lab_id=lab_id,
             patient_id=patient_id,
             result_date=result_date,
             results=results,
+            added_by=added_by
         )
         self.session.add(lr)
         self.session.commit()
@@ -83,12 +87,14 @@ class PatientRepository:
     
     def add_doctor_note(
         self,
+        note_id: str,
         patient_id: str,
         note_date: Optional[date],
         note: Optional[str],
         added_by: Optional[str],
     ) -> DoctorNote:
         doc_note = DoctorNote(
+            note_id=note_id,
             patient_id=patient_id,
             note_date=note_date,
             note=note,

@@ -7,30 +7,43 @@ from pydantic import ConfigDict  # v2
 
 _num = re.compile(r"(\d+\.?\d*)")
 
-
-class LabResultOut(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-    id: str = Field(validation_alias='lab_id', serialization_alias='id')
-    date: Optional[datetime] = Field(None, validation_alias='result_date', serialization_alias='date')
+class LabResultIn(BaseModel):
+    id: Optional[str] = None
+    date: Optional[datetime] = None
     results: Optional[str] = None
-    added_by: Optional[str] = None  # drop if you don't store it
+    added_by: Optional[str] = None
 
-class DoctorNoteOut(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-    id: str = Field(validation_alias='note_id', serialization_alias='id')
-    date: Optional[datetime] = Field(None, validation_alias='note_date', serialization_alias='date')
+
+class DoctorNoteIn(BaseModel):
+    id: Optional[str] = None
+    date: Optional[datetime] = None
     note: str = ""
     added_by: Optional[str] = None
 
 
+class LabResultOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    lab_id: str = Field(serialization_alias="id")  # ORM attr; frontend sees "id"
+    date: Optional[datetime] = Field(None, validation_alias="result_date", serialization_alias="date")
+    results: Optional[str] = None
+    added_by: Optional[str] = None
+
+
+class DoctorNoteOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    note_id: str = Field(serialization_alias="id")
+    date: Optional[datetime] = Field(None, validation_alias="note_date", serialization_alias="date")
+    note: str = ""
+    added_by: Optional[str] = None
+
 class PatientCreate(BaseModel):
     name: str
-    age: int    
-    birthDate: date                                      # <-- use birthDate not age
+    age: int
+    birthDate: date
     height: Optional[Union[float, str]] = None
     weight: Optional[Union[float, str]] = None
-    lab_results_history: List[LabResultOut]  # <-- change here
-    doctors_notes_history: List[DoctorNoteOut] 
+    lab_results_history: List[LabResultIn] = Field(default_factory=list)
+    doctors_notes_history: List[DoctorNoteIn] = Field(default_factory=list)
     severity: str
 
     @field_validator("height", "weight", mode="before")
@@ -42,15 +55,16 @@ class PatientCreate(BaseModel):
             return float(v)
         m = _num.search(str(v))
         return float(m.group(1)) if m else None
-
+    
+    
 
 class PatientUpdate(BaseModel):
     name: Optional[str] = None
-    birthDate: Optional[date] = None                     # <-- keep birthDate for updates too
+    birthDate: Optional[date] = None
     height: Optional[Union[float, str]] = None
     weight: Optional[Union[float, str]] = None
-    lab_results: Optional[Union[str, Dict[str, Any]]] = None  # <- make optional
-    doctors_notes: Optional[List[Dict[str, Any]]] = None
+    lab_results: Optional[LabResultIn] = None
+    doctors_notes: Optional[DoctorNoteIn] = None
     severity: Optional[str] = None
 
     @field_validator("height", "weight", mode="before")
@@ -68,12 +82,12 @@ class PatientUpdate(BaseModel):
 class PatientResponse(BaseModel):
     patient_id: str
     name: str
-    birthDate: str
+    birthDate: datetime
     height: str
     weight: str
-    doctors_notes: Optional[DoctorNoteOut] = None   # latest can be missing
     severity: str
-    lab_results: Optional[LabResultOut] = None      # latest can be missing
+    latest_lab_result: Optional[LabResultOut] = None
+    latest_doctor_note: Optional[DoctorNoteOut] = None  # <-- singular
     lab_results_history: List[LabResultOut] = []
     doctors_notes_history: List[DoctorNoteOut] = []
 

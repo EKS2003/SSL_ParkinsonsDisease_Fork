@@ -145,26 +145,33 @@ def normalize_severity(value: str) -> str:
 
     return legacy_map.get(normalized, "Stage 1")
 
-def _patient_to_api_dict(session: Session, p: Patient) -> Dict[str, Any]:
+def _patient_to_api_dict(session: Session, p: Patient) -> PatientOut:
     prepo = PatientRepository(session)
-    labs = sorted(prepo.list_lab_results(p.patient_id), key=lambda r: (r.result_date or date.min, r.lab_id))
-    notes = sorted(prepo.list_doctor_notes(p.patient_id), key=lambda n: (n.note_date or date.min, n.note_id))
+    labs = sorted(
+        prepo.list_lab_results(p.patient_id),
+        key=lambda r: (r.result_date or date.min, r.lab_id),
+    )
+    notes = sorted(
+        prepo.list_doctor_notes(p.patient_id),
+        key=lambda n: (n.note_date or date.min, n.note_id),
+    )
 
     latest_lr = LabResultOut.model_validate(labs[-1]) if labs else None
     latest_dn = DoctorNoteOut.model_validate(notes[-1]) if notes else None
 
-    return {
-        "patient_id": p.patient_id,
-        "name": p.name or "",
-        "birthDate": p.dob.isoformat() if p.dob else "",
-        "height": str(p.height or 0),
-        "weight": str(p.weight or 0),
-        "doctors_notes": latest_dn,
-        "severity": p.severity or "",
-        "lab_results": latest_lr,
-        "lab_results_history": [LabResultOut.model_validate(x) for x in labs],
-        "doctors_notes_history": [DoctorNoteOut.model_validate(x) for x in notes],
-    }
+    return PatientResponse(
+        patient_id=p.patient_id,
+        name=p.name or "",
+        birthDate=p.dob or datetime.now(),  # or adjust type to date if you prefer
+        height=str(p.height or 0),
+        weight=str(p.weight or 0),
+        severity=p.severity or "",
+        latest_lab_result=latest_lr,
+        latest_doctor_note=latest_dn,
+        lab_results_history=[LabResultOut.model_validate(x) for x in labs],
+        doctors_notes_history=[DoctorNoteOut.model_validate(x) for x in notes],
+    )
+
 
 def create_patient(
     name: str,
@@ -204,6 +211,7 @@ def create_patient(
 
             dbp = Patient(
                 patient_id=patient_id,
+                user_id=123,
                 name=name,
                 dob=dob,
                 height=int(h) if h is not None else None,
@@ -214,15 +222,17 @@ def create_patient(
 
             for lr in lab_results_history or []:
                 prepo.add_lab_result(
+                    lab_id=lr.id,
                     patient_id=patient_id,
                     result_date=lr.date or datetime.now(),
                     results=lr.results or "",
-                    added_by=lr.added_by or "system"  # if your repo supports this
+                    added_by=lr.added_by or "system"   
                 )
 
             # persist all doctor notes in history (if any)
             for dn in doctors_notes_history or []:
                 prepo.add_doctor_note(
+                    note_id=dn.id,
                     patient_id=patient_id,
                     note_date=dn.date or datetime.now(),
                     note=dn.note or "",
@@ -267,8 +277,11 @@ def _extract_lab_result_value(v: Any) -> Optional[str]:
         return v
     return str(v)
 
-def update_patient_info(patient_id: str, updated_data: Dict[str, Any]) -> Dict[str, Any]:
-    errs = _validate(updated_data)  # assumes your _validate handles partials
+def update_patient_info(patient_id: str, updated_data: PatientUpdate) -> Dict[str, Any]:
+    # Turn model into a partial dict
+    data = updated_data.model_dump(exclude_unset=True)
+
+    errs = _validate(data)  # or skip this if _validate expects full objects only
     if errs:
         return {"success": False, "errors": errs}
 
@@ -280,48 +293,45 @@ def update_patient_info(patient_id: str, updated_data: Dict[str, Any]) -> Dict[s
             return {"success": False, "error": "Patient not found"}
 
         # --- Patch basic Patient columns ---
-        changed = False
-        if "name" in updated_data:
-            dbp.name = updated_data["name"]; changed = True
+        if "name" in data:
+            dbp.name = data["name"]
 
-        if "birthDate" in updated_data:
-            bd = updated_data["birthDate"]
-            dbp.dob = date.fromisoformat(bd) if bd else None
-            changed = True
+        if "birthDate" in data:
+            dbp.dob = data["birthDate"]
 
-        if "height" in updated_data:
-            h = _parse_number(updated_data["height"], 0, 300)
+        if "height" in data:
+            h = _parse_number(data["height"], 0, 300)
             dbp.height = int(h) if h is not None else None
-            changed = True
 
-        if "weight" in updated_data:
-            w = _parse_number(updated_data["weight"], 0, 500)
+        if "weight" in data:
+            w = _parse_number(data["weight"], 0, 500)
             dbp.weight = int(w) if w is not None else None
-            changed = True
 
-        if changed:
-            session.commit()
+        if "severity" in data:
+            dbp.severity = data["severity"]
 
-        # --- New Visit snapshot if any visit-scoped fields provided ---
-        # Accept either 'lab_result' or 'lab_results' from caller
-        lab_input = updated_data.get("lab_results")
-        if lab_input is not None:
-            lab_input = _extract_lab_result_value(lab_input)
+        # --- New visit-scoped fields ---
+        if updated_data.lab_results is not None:
+            lab_input = updated_data.lab_results
             prepo.add_lab_result(
+                lab_id= lab_input.id,
                 patient_id=patient_id,
-                result_date=datetime.now(),
-                results= lab_input)
-            
-        if "doctors_notes" in updated_data:
-            prepo.add_doctor_note(
-                patient_id=patient_id,
-                note_date=datetime.now(),
-                note=updated_data["doctors_notes"][0]["note"],
-                added_by="system",
+                result_date=lab_input.date or datetime.now(),
+                results=lab_input.results or "",
+                added_by=lab_input.added_by or "system",
             )
 
+        if updated_data.doctors_notes is not None:
+            note_input = updated_data.doctors_notes
+            prepo.add_doctor_note(
+                note_id=note_input.id,
+                patient_id=patient_id,
+                note_date=note_input.date or datetime.now(),
+                note=note_input.note or "",
+                added_by=note_input.added_by or "system",
+            )
 
-        
+        session.commit()
         return {"success": True, "patient_id": patient_id}
 
 def delete_patient_record(patient_id: str) -> Dict[str, Any]:
