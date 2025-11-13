@@ -168,12 +168,13 @@ def _patient_to_api_dict(session: Session, p: Patient) -> Dict[str, Any]:
 
 def create_patient(
     name: str,
+    age: int,
     birthDate: Union[str, date],
     height: Optional[float],
     weight: Optional[float],
-    lab_results: Optional[str],
-    doctors_notes: str,
-    severity: str,
+    lab_results_history: Optional[List[LabResultOut]] = None,
+    doctors_notes_history: Optional[List[DoctorNoteOut]] = None,
+    severity: str = "",
 ) -> Dict[str, Any]:
     errs = _validate({
         "name": name,
@@ -211,19 +212,22 @@ def create_patient(
             )
             prepo.add(dbp)
 
-            # first lab + first note rows
-            prepo.add_lab_result(
-                patient_id=patient_id,
-                result_date=datetime.now(),  # was datetime.date()
-                results=lab_results,
-            )
+            for lr in lab_results_history or []:
+                prepo.add_lab_result(
+                    patient_id=patient_id,
+                    result_date=lr.date or datetime.now(),
+                    results=lr.results or "",
+                    added_by=lr.added_by or "system"  # if your repo supports this
+                )
 
-            prepo.add_doctor_note(
-                patient_id=patient_id,
-                note_date=datetime.now(),
-                note=doctors_notes,
-                added_by="system",
-            )
+            # persist all doctor notes in history (if any)
+            for dn in doctors_notes_history or []:
+                prepo.add_doctor_note(
+                    patient_id=patient_id,
+                    note_date=dn.date or datetime.now(),
+                    note=dn.note or "",
+                    added_by=dn.added_by or "system",
+                )
 
             return {"success": True, "patient_id": patient_id}
     except Exception as e:

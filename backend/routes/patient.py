@@ -29,14 +29,14 @@ router = APIRouter(prefix="/patients")
 
 @router.post("/", response_model=Dict)
 async def create_patient(patient: PatientCreate):
-    
     result = await async_create_patient(
         name=patient.name,
+        age=patient.age,
         birthDate=patient.birthDate,
         height=patient.height,
         weight=patient.weight,
-        lab_results=patient.lab_results or "",
-        doctors_notes=patient.doctors_notes or "",
+        lab_results=patient.lab_results_history or "",
+        doctors_notes=patient.doctors_notes_history or "",
         severity=patient.severity,
     )
 

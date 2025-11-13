@@ -10,14 +10,14 @@ _num = re.compile(r"(\d+\.?\d*)")
 
 class LabResultOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
-    id: int = Field(validation_alias='lab_id', serialization_alias='id')
+    id: str = Field(validation_alias='lab_id', serialization_alias='id')
     date: Optional[datetime] = Field(None, validation_alias='result_date', serialization_alias='date')
     results: Optional[str] = None
     added_by: Optional[str] = None  # drop if you don't store it
 
 class DoctorNoteOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
-    id: int = Field(validation_alias='note_id', serialization_alias='id')
+    id: str = Field(validation_alias='note_id', serialization_alias='id')
     date: Optional[datetime] = Field(None, validation_alias='note_date', serialization_alias='date')
     note: str = ""
     added_by: Optional[str] = None
@@ -25,11 +25,12 @@ class DoctorNoteOut(BaseModel):
 
 class PatientCreate(BaseModel):
     name: str
+    age: int    
     birthDate: date                                      # <-- use birthDate not age
     height: Optional[Union[float, str]] = None
     weight: Optional[Union[float, str]] = None
-    lab_results: Optional[str]  # <-- change here
-    doctors_notes: Optional[str] = ""
+    lab_results_history: List[LabResultOut]  # <-- change here
+    doctors_notes_history: List[DoctorNoteOut] 
     severity: str
 
     @field_validator("height", "weight", mode="before")

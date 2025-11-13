@@ -6,14 +6,13 @@ from datetime import datetime, timedelta
 import os
 import shutil
 import uvicorn
-from subprocess import run, PIPE
 
 from routes.dtw_rest import router as dtw_router
 from routes.patient import router as patient_router
 from routes.websockets import router as ws_router
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from repo.sql_models import User
-from repo.db import engine, sessionmaker
+from repo.db import engine
 from jose import jwt, JWTError
 from passlib.context import CryptContext
 from patient_manager import SessionLocal
@@ -94,7 +93,7 @@ async def get_current_user(token: str = Depends(oauth2_scheme)) -> User:
         return user
     
 @app.post("/token")
-async def login(form: OAuth2PasswordRequestForm = Depends):
+async def login(form: OAuth2PasswordRequestForm = Depends()):
     user = authenticate(form.username, form.password)
     if not user:
         raise HTTPException(status_code=401, detail="Incorrect username or password")

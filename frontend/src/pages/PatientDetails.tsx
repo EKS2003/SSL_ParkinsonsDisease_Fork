@@ -42,48 +42,9 @@ import {
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 
-// Mock data - replace with actual data fetching
-const mockPatient: Patient = {
-  id: '1',
-  firstName: 'John',
-  lastName: 'Smith',
-  recordNumber: 'P001',
-  birthDate: '1980-05-15',
-  height: '5\'8"',
-  weight: '170 lbs',
-  labResults: 'Normal CBC, elevated dopamine markers, glucose 95 mg/dL',
-  doctorNotes: 'Patient shows mild tremor in right hand. Responds well to L-DOPA treatment. Recommend continued monitoring and physical therapy.',
-  severity: 'Stage 1',
-  createdAt: new Date('2024-01-15'),
-  updatedAt: new Date('2024-01-20'),
-};
 
-const mockTests: Test[] = [
-  {
-    id: 'test1',
-    patientId: '1',
-    name: 'Stand and Sit Assessment',
-    type: 'stand-and-sit',
-    date: new Date('2024-01-20'),
-    status: 'completed',
-  },
-  {
-    id: 'test2',
-    patientId: '1',
-    name: 'Finger Tapping Evaluation',
-    type: 'finger-tapping',
-    date: new Date('2024-01-18'),
-    status: 'completed',
-  },
-  {
-    id: 'test3',
-    patientId: '1',
-    name: 'Fist Open and Close Assessment',
-    type: 'fist-open-close',
-    date: new Date('2024-01-15'),
-    status: 'completed',
-  },
-];
+
+
 
 
 const indicatorBadgeClasses: Record<TestIndicator['color'], string> = {
