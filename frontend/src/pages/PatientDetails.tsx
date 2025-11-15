@@ -227,7 +227,7 @@ const PatientDetails = () => {
               date: toISO(newEntry.date),
               note: newEntry.note,
               added_by: newEntry.addedBy ?? null,
-            },
+            }, 
         }),
       });
       const text = await res.text();

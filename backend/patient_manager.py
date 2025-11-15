@@ -145,7 +145,7 @@ def normalize_severity(value: str) -> str:
 
     return legacy_map.get(normalized, "Stage 1")
 
-def _patient_to_api_dict(session: Session, p: Patient) -> PatientOut:
+def _patient_to_api_dict(session: Session, p: Patient) -> PatientResponse:
     prepo = PatientRepository(session)
     labs = sorted(
         prepo.list_lab_results(p.patient_id),
@@ -412,184 +412,36 @@ async def async_filter_patients(criteria: Dict[str, Any]) -> Dict[str, Any]:
 # =========================
 # TestHistoryManager refactor -> SQL TestResultRepository
 # =========================
+TEST_HISTORY_FILE = os.path.join(os.path.dirname(__file__), 'test_history.json')
+
 class TestHistoryManager:
     _lock = threading.Lock()
 
-    _TEST_LABELS = {
-        "finger-tapping": "Finger Tapping Test",
-        "fist-open-close": "Fist Open and Close Test",
-        "stand-and-sit": "Stand and Sit Test",
-    }
+    def __init__(self, file_path: str = TEST_HISTORY_FILE):
+        self.file_path = file_path
+        self._load()
 
-    _STATUS_INDICATORS = {
-        "completed": {
-            "color": "success",
-            "label": "Completed",
-            "description": "Recording captured successfully.",
-        },
-        "in-progress": {
-            "color": "warning",
-            "label": "In Progress",
-            "description": "Test recording underway; results may be incomplete.",
-        },
-        "pending": {
-            "color": "muted",
-            "label": "Pending",
-            "description": "Test scheduled but no recording stored yet.",
-        },
-    }
-
-
-    def __init__(self) -> None:
-        pass
-
-
- 
-    def _default_display_name(self, test_name: str) -> str:
-        if not test_name:
-            return "Unknown Test"
-        if test_name in self._TEST_LABELS:
-            return self._TEST_LABELS[test_name]
-        return test_name.replace("-", " ").title()
-
-    def _normalize_indicator(self, status: str, indicator: Optional[Dict[str, Any]]) -> Dict[str, str]:
-        status_key = (status or "").strip().lower() or "pending"
-        base = self._STATUS_INDICATORS.get(status_key, self._STATUS_INDICATORS["pending"]).copy()
-        if not indicator or not isinstance(indicator, dict):
-            return base
-        merged = base
-        if "color" in indicator:
-            merged["color"] = str(indicator["color"]) or base["color"]
-        if "label" in indicator:
-            merged["label"] = str(indicator["label"]) or base["label"]
-        if "description" in indicator:
-            merged["description"] = str(indicator["description"]) or base["description"]
-        return merged
-
-    def _normalize_entry(self, patient_id: str, raw_entry: Dict[str, Any]) -> Dict[str, Any]:
-        entry = dict(raw_entry or {})
-
-        test_name_raw = entry.get("test_name") or entry.get("name") or entry.get("test") or ""
-        normalized_test_name = _normalize_test_name(test_name_raw)
-        entry["test_name"] = normalized_test_name
-        entry["display_name"] = entry.get("display_name") or self._default_display_name(normalized_test_name)
-        entry["patient_id"] = patient_id
-
-        entry["date"] = Patient._normalize_date_value(entry.get("date"))
-
-        recording_file = entry.get("recording_file") or entry.get("recording")
-        if recording_file:
-            base_file = os.path.basename(str(recording_file))
-            entry["recording_file"] = base_file
-            entry.setdefault("recording_url", f"/recordings/{base_file}")
-
-        existing_id = entry.get("test_id") or entry.get("id")
-        if existing_id:
-            token = str(existing_id)
+    def _load(self):
+        if os.path.exists(self.file_path):
+            with open(self.file_path, 'r') as f:
+                self.data = json.load(f)
         else:
-            candidate = entry.get("recording_file") or entry.get("session_id") or entry.get("date")
-            if candidate:
-                token = os.path.splitext(os.path.basename(str(candidate)))[0]
-            else:
-                token = uuid4().hex[:12]
-        if not token.startswith(normalized_test_name):
-            token = f"{normalized_test_name}-{token}"
-        entry["test_id"] = token
-        entry["id"] = token
+            self.data = {}
 
-        status_raw = (entry.get("status") or "").strip().lower()
-        if not status_raw:
-            status_raw = "completed" if entry.get("recording_file") else "pending"
-        if status_raw not in self._STATUS_INDICATORS:
-            status_raw = "pending"
-        entry["status"] = status_raw
-        entry["indicator"] = self._normalize_indicator(status_raw, entry.get("indicator"))
+    def _save(self):
+        with open(self.file_path, 'w') as f:
+            json.dump(self.data, f, indent=2)
 
-        frame_count = entry.get("frame_count")
-        try:
-            entry["frame_count"] = int(frame_count) if frame_count is not None else None
-        except (TypeError, ValueError):
-            entry["frame_count"] = None
+    def get_patient_tests(self, patient_id: str):
+        return self.data.get(patient_id, [])
 
-        fps_value = entry.get("fps")
-        try:
-            entry["fps"] = float(fps_value) if fps_value is not None else None
-        except (TypeError, ValueError):
-            entry["fps"] = None
+    def add_patient_test(self, patient_id: str, test_data: dict):
+        with self._lock:
+            self._load()
+            if patient_id not in self.data:
+                self.data[patient_id] = []
+            self.data[patient_id].append(test_data)
+            self._save()
 
-        dtw_data = entry.get("dtw")
-        if isinstance(dtw_data, dict):
-            dtw_clean = {
-                "distance": float(dtw_data.get("distance")) if dtw_data.get("distance") is not None else None,
-                "avg_step_cost": float(dtw_data.get("avg_step_cost")) if dtw_data.get("avg_step_cost") is not None else None,
-                "similarity": float(dtw_data.get("similarity")) if dtw_data.get("similarity") is not None else None,
-                "session_id": dtw_data.get("session_id"),
-                "artifacts_dir": dtw_data.get("artifacts_dir") or dtw_data.get("artifacts"),
-            }
-            entry["dtw"] = dtw_clean
-        else:
-            entry["dtw"] = None
-
-        summary_available = entry.get("summary_available")
-        if summary_available is None:
-            entry["summary_available"] = bool(entry.get("recording_file"))
-        else:
-            entry["summary_available"] = bool(summary_available)
-
-        return entry
-
-    def get_patient_tests(self, patient_id: str) -> List[Dict[str, Any]]:
-        with SessionLocal() as session:
-            trepo = TestResultRepository(session)
-            results = trepo.get_by_patient(patient_id)
-            out: List[Dict[str, Any]] = []
-            for r in results:
-                out.append({
-                    "test_id": r.test_id,
-                    "patient_id": r.patient_id,
-                    "test_name": r.test_name,
-                    "test_date": r.test_date.isoformat() if r.test_date else None,
-                    "recording_file": r.recording_file,
-                    "frame_count": r.frame_count,
-                    "keypoints": r.keypoints,
-                })
-            return out
-
-    def add_patient_test(self, patient_id: str, test_data: Dict[str, Any]) -> Dict[str, Any]:
-        with SessionLocal() as session:
-            trepo = TestResultRepository(session)
-
-            # parse date if sent as ISO string
-            raw_dt = test_data.get("test_date")
-            parsed_dt = None
-            if raw_dt:
-                parsed_dt = datetime.fromisoformat(raw_dt)
-
-            from repo.sql_models import TestResult
-            new_test = TestResult(
-                patient_id=patient_id,
-                test_name=test_data.get("test_name"),
-                test_date=parsed_dt,
-                recording_file=test_data.get("recording_file"),
-                frame_count=test_data.get("frame_count"),
-                keypoints=test_data.get("keypoints"),
-            )
-            new_test = trepo.add(new_test)
-            return {"success": True, "test_id": new_test.test_id}
-
-    def get_all_tests(self) -> Dict[str, List[Dict[str, Any]]]:
-        with SessionLocal() as session:
-            trepo = TestResultRepository(session)
-            results = trepo.list()
-            by_pid: Dict[str, List[Dict[str, Any]]] = {}
-            for r in results:
-                by_pid.setdefault(r.patient_id, []).append({
-                    "test_id": r.test_id,
-                    "patient_id": r.patient_id,
-                    "test_name": r.test_name,
-                    "test_date": r.test_date.isoformat() if r.test_date else None,
-                    "recording_file": r.recording_file,
-                    "frame_count": r.frame_count,
-                    "keypoints": r.keypoints,
-                })
-            return by_pid
+    def get_all_tests(self):
+        return self.data

@@ -58,21 +58,32 @@ def _decode_base64_image(data_str: str) -> np.ndarray:
     return frame
 
 def _save_frames_to_mp4(frames: List[np.ndarray], fps: float = 30.0) -> str:
-    """Saves frames to MP4 and returns the filename (inside RECORDINGS_DIR)."""
     if not frames:
         raise ValueError("No frames to save.")
+
     cv2 = _cv2()
     h, w = frames[0].shape[:2]
-    fourcc = cv2.VideoWriter_fourcc(*"mp4v")
+
     recording_id = str(uuid.uuid4())
     ts = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
     filename = f"ws_recording_{ts}_{recording_id}.mp4"
     path = os.path.join(RECORDINGS_DIR, filename)
-    writer = cv2.VideoWriter(path, fourcc, fps, (w, h))
+
+    # Try H.264 first, fall back to mp4v if unavailable
+    for fourcc_str in ("avc1", "H264", "mp4v"):
+        fourcc = cv2.VideoWriter_fourcc(*fourcc_str)
+        writer = cv2.VideoWriter(path, fourcc, fps, (w, h))
+        if writer.isOpened():
+            print("Using fourcc:", fourcc_str)
+            break
+    else:
+        raise RuntimeError("Could not open VideoWriter with any codec")
+
     for f in frames:
         writer.write(f)
     writer.release()
     return filename
+
 
 # ============ MediaPipe extractor ============
 class MPExtractor:

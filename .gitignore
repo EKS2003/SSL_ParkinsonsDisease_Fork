@@ -76,3 +76,5 @@ frontend/src/pages/VideoRecording copy.tsx
 /backend/recordings
 /backend/dtw_runs/finger-tapping
 /backend/dtw_runs/fist-open-close
+meta.json
+test_history.json

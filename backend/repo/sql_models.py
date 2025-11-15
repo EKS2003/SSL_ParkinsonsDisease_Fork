@@ -15,6 +15,9 @@ class User(Base):
     full_name: Mapped[Optional[str]] = mapped_column(String(255))
     email: Mapped[Optional[str]] = mapped_column(String(320), unique=True)
     hashed_password: Mapped[str] = mapped_column(String(255), nullable=False)
+    location: Mapped[str] = mapped_column(String(255), nullable = False)
+    title: Mapped[str] = mapped_column(String(255), nullable = False)
+    speciality: Mapped[str] = mapped_column(String(255), nullable = False)
 
     # one user -> many patients
     patients: Mapped[List["Patient"]] = relationship(
