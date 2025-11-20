@@ -85,14 +85,30 @@ const TestSelection = () => {
           apiService.getPatient(id),
           apiService.getPatientTests(id),
         ]);
+
+        // patient
         if (patientRes.success && patientRes.data) {
           setPatient(patientRes.data);
         } else {
           setError(patientRes.error || 'Failed to fetch patient');
         }
+
+        // tests
         if (testsRes.success && testsRes.data) {
-          setTestHistory(testsRes.data);
-        } // else ignore for now
+          const normalized: Test[] = testsRes.data.map((t: any) => ({
+            id: String(t.test_id),
+            patientId: t.patient_id,
+            name: t.test_name ?? 'Unknown test',
+            // backend stores the concrete name (e.g. "stand-and-sit")
+            // so we can reuse it as the union; fallback to 'stand-and-sit'
+            type: (t.test_name as 'stand-and-sit' | 'palm-open') ?? 'stand-and-sit',
+            date: t.test_date ? new Date(t.test_date) : new Date(),
+            status: t.recording_file ? 'completed' : 'pending',
+            videoUrl: t.recording_file,
+            results: t.keypoints ? { raw: t.keypoints } as any : undefined,
+          }));
+          setTestHistory(normalized);
+        }
       } catch (err: any) {
         setError(err.message || 'Failed to connect to server');
       } finally {
@@ -220,13 +236,17 @@ const TestSelection = () => {
                     </Badge>
                   </div>
                 </div>
-                <Separator />
-                <div>
-                  <p className="text-sm font-medium text-muted-foreground mb-2">Recent Notes</p>
-                  <div className="bg-muted p-3 rounded-md">
-                    <p className="text-sm">{patient.doctorNotes}</p>
-                  </div>
+              <Separator />
+              <div>
+                <p className="text-sm font-medium text-muted-foreground mb-2">Recent Notes</p>
+                <div className="bg-muted p-3 rounded-md">
+                  <p className="text-sm">
+                    {Array.isArray(patient.doctorNotes)
+                      ? patient.doctorNotes[0]?.note ?? 'No recent notes'
+                      : (patient.doctorNotes as any)?.note ?? patient.doctorNotes ?? 'No recent notes'}
+                  </p>
                 </div>
+              </div>
               </CardContent>
             </Card>
             {/* Test History */}

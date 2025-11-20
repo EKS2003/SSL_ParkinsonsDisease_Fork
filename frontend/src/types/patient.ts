@@ -22,8 +22,8 @@ export interface Patient {
   weight: string;
   labResults: string; // Keep for backward compatibility
   doctorNotes: string; // Keep for backward compatibility
-  labResultsHistory?: LabResultEntry[];
-  doctorNotesHistory?: DoctorNoteEntry[];
+  labResultsHistory: LabResultEntry[];
+  doctorNotesHistory: DoctorNoteEntry[];
   severity: 'Stage 1' | 'Stage 2' | 'Stage 3' | 'Stage 4' | 'Stage 5';
   lastVisit?: Date | null;
   primaryPhysician?: string | null;

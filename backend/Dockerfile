@@ -32,6 +32,10 @@ RUN pip install --no-cache-dir \
     scikit-learn \
     pathlib
 
+RUN pip install sqlalchemy
+RUN pip install numpy
+RUN pip install tslearn
+
 COPY . .
 
 EXPOSE 8000

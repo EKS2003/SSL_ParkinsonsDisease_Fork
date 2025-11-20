@@ -1,4 +1,6 @@
+# =========================================================
 # Logs
+# =========================================================
 logs
 *.log
 npm-debug.log*
@@ -7,16 +9,45 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
-node_modules
-dist
-dist-ssr
-*.local
+# =========================================================
+# Dependencies / Build Artifacts
+# =========================================================
+node_modules/
+dist/
+dist-ssr/
+*.tgz
+*.tar.gz
 
-# Editor directories and files
+# Next.js / React / Vue
+.next/
+out/
+coverage/
+
+# Python
+__pycache__/
+*.pyc
+venv/
+.venv/
+*.egg-info/
+
+# Databases
+*.db
+*.mov
+*.mp4
+
+# =========================================================
+# Environment / Local Config
+# =========================================================
+*.local
+.env
+.env.*
+
+# =========================================================
+# Editor / IDE
+# =========================================================
 .vscode/*
 !.vscode/extensions.json
-.idea
-.DS_Store
+.idea/
 *.suo
 *.ntvs*
 *.njsproj
@@ -37,6 +68,14 @@ dist-ssr
 *.mkv
 *.avi
 *.mov
+# =========================================================
+# OS-specific
+# =========================================================
+.DS_Store
+Thumbs.db
+ehthumbs.db
+
+*.npz
 *.mp4
 *.mov
 *.avi
@@ -54,4 +93,5 @@ frontend/src/pages/VideoRecording copy.tsx
 
 # data files
 backend/patients.json
-backend/patients.json.backup
+backend/patients.json.backupmeta.json
+test_history.json

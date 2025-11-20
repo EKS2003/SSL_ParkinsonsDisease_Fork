@@ -1,87 +1,84 @@
-import { useCallback, useEffect, useMemo, useState} from 'react';
-import { useParams, Link } from 'react-router-dom';
-import { ArrowLeft, Plus, Calendar, FileText, Activity, Edit, Play, Clock, User, Stethoscope } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
-import { Separator } from '@/components/ui/separator';
-import { Patient, Test, LabResultEntry, DoctorNoteEntry, TestIndicator } from '@/types/patient';
-import { getSeverityColor, calculateAge } from '@/lib/utils';
-import apiService, { mapSeverity } from '@/services/api';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, } from '@/components/ui/dialog';
-import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea';
-import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select';
-import { Label } from '@/components/ui/label';
-import { useToast } from '@/hooks/use-toast';
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { useParams, Link } from "react-router-dom";
+import {
+  ArrowLeft,
+  Plus,
+  Calendar,
+  FileText,
+  Activity,
+  Edit,
+  Play,
+  User,
+  Stethoscope,
+} from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Separator } from "@/components/ui/separator";
+import {
+  Patient,
+  Test,
+  LabResultEntry,
+  DoctorNoteEntry,
+  TestIndicator,
+} from "@/types/patient";
+import { getSeverityColor, calculateAge } from "@/lib/utils";
+import apiService, { mapSeverity } from "@/services/api";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  Select,
+  SelectTrigger,
+  SelectValue,
+  SelectContent,
+  SelectItem,
+} from "@/components/ui/select";
+import { Label } from "@/components/ui/label";
+import { useToast } from "@/hooks/use-toast";
 
-// Mock data - replace with actual data fetching
-const mockPatient: Patient = {
-  id: '1',
-  firstName: 'John',
-  lastName: 'Smith',
-  recordNumber: 'P001',
-  birthDate: '1980-05-15',
-  height: '5\'8"',
-  weight: '170 lbs',
-  labResults: 'Normal CBC, elevated dopamine markers, glucose 95 mg/dL',
-  doctorNotes: 'Patient shows mild tremor in right hand. Responds well to L-DOPA treatment. Recommend continued monitoring and physical therapy.',
-  severity: 'Stage 1',
-  createdAt: new Date('2024-01-15'),
-  updatedAt: new Date('2024-01-20'),
+const indicatorBadgeClasses: Record<TestIndicator["color"], string> = {
+  success: "bg-success text-success-foreground",
+  warning: "bg-warning text-warning-foreground",
+  destructive: "bg-destructive text-destructive-foreground",
+  muted: "bg-muted text-muted-foreground",
 };
 
-const mockTests: Test[] = [
-  {
-    id: 'test1',
-    patientId: '1',
-    name: 'Stand and Sit Assessment',
-    type: 'stand-and-sit',
-    date: new Date('2024-01-20'),
-    status: 'completed',
+const testTypeStyles: Record<
+  Test["type"],
+  { container: string; badge: string }
+> = {
+  "stand-and-sit": {
+    container: "border-l-4 border-l-emerald-500/80 bg-emerald-50/40",
+    badge: "border border-emerald-200 bg-emerald-100 text-emerald-700",
   },
-  {
-    id: 'test2',
-    patientId: '1',
-    name: 'Finger Tapping Evaluation',
-    type: 'finger-tapping',
-    date: new Date('2024-01-18'),
-    status: 'completed',
+  "finger-tapping": {
+    container: "border-l-4 border-l-sky-500/80 bg-sky-50/40",
+    badge: "border border-sky-200 bg-sky-100 text-sky-700",
   },
-  {
-    id: 'test3',
-    patientId: '1',
-    name: 'Fist Open and Close Assessment',
-    type: 'fist-open-close',
-    date: new Date('2024-01-15'),
-    status: 'completed',
-  },
-];
-
-
-const indicatorBadgeClasses: Record<TestIndicator['color'], string> = {
-  success: 'bg-success text-success-foreground',
-  warning: 'bg-warning text-warning-foreground',
-  destructive: 'bg-destructive text-destructive-foreground',
-  muted: 'bg-muted text-muted-foreground',
-};
-
-const testTypeStyles: Record<Test['type'], { container: string; badge: string }> = {
-  'stand-and-sit': {
-    container: 'border-l-4 border-l-emerald-500/80 bg-emerald-50/40',
-    badge: 'border border-emerald-200 bg-emerald-100 text-emerald-700',
-  },
-  'finger-tapping': {
-    container: 'border-l-4 border-l-sky-500/80 bg-sky-50/40',
-    badge: 'border border-sky-200 bg-sky-100 text-sky-700',
-  },
-  'fist-open-close': {
-    container: 'border-l-4 border-l-amber-500/80 bg-amber-50/40',
-    badge: 'border border-amber-200 bg-amber-100 text-amber-700',
+  "fist-open-close": {
+    container: "border-l-4 border-l-amber-500/80 bg-amber-50/40",
+    badge: "border border-amber-200 bg-amber-100 text-amber-700",
   },
 };
 
-
+// ---------- Date helpers ----------
+const isValidDate = (d: unknown): d is Date =>
+  d instanceof Date && !Number.isNaN(d.getTime());
+const asDate = (v: unknown): Date => {
+  const d = v instanceof Date ? v : new Date(v as any);
+  return isValidDate(d) ? d : new Date(); // or choose to return new Date(0) / null
+};
+const toISO = (v: unknown): string => {
+  const d = v instanceof Date ? v : new Date(v as any);
+  return isValidDate(d) ? d.toISOString() : new Date().toISOString();
+};
 
 const PatientDetails = () => {
   const { id } = useParams<{ id: string }>();
@@ -90,13 +87,13 @@ const PatientDetails = () => {
   const [error, setError] = useState<string | null>(null);
   const [tests, setTests] = useState<Test[]>([]); // Placeholder – replace with real API if available
   const [testsLoading, setTestsLoading] = useState(true);
-  const [testSearch, setTestSearch] = useState('');
+  const [testSearch, setTestSearch] = useState("");
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [editData, setEditData] = useState<Partial<Patient>>({});
   const [isLabResultModalOpen, setIsLabResultModalOpen] = useState(false);
   const [isDoctorNoteModalOpen, setIsDoctorNoteModalOpen] = useState(false);
-  const [newLabResult, setNewLabResult] = useState('');
-  const [newDoctorNote, setNewDoctorNote] = useState('');
+  const [newLabResult, setNewLabResult] = useState("");
+  const [newDoctorNote, setNewDoctorNote] = useState("");
   const { toast } = useToast();
 
   const sortedTests = useMemo(
@@ -144,107 +141,105 @@ const PatientDetails = () => {
     setIsEditOpen(false);
   };
 
+  // --- Send ONE lab result per submit (optimistic UI + rollback) ---
   const handleAddLabResult = async () => {
     if (!patient || !newLabResult.trim()) return;
-    
+
     const newEntry: LabResultEntry = {
       id: `lab_${Date.now()}`,
       date: new Date(),
-      results: newLabResult,
-      addedBy: 'Current User' // In a real app, this would come from auth context
+      results: newLabResult.trim(),
+      addedBy: "Current User", // In a real app, this would come from auth context
     };
 
-    const updatedHistory = [...(patient.labResultsHistory || []), newEntry];
-    const updatedPatient = { ...patient, labResultsHistory: updatedHistory };
-    
-    // Update local state immediately for UI responsiveness
-    setPatient(updatedPatient);
-    setNewLabResult('');
+    const prev = patient;
+    const updated = {
+      ...patient,
+      labResultsHistory: [...(patient.labResultsHistory ?? []), newEntry],
+    };
+
+    // optimistic UI
+    setPatient(updated);
+    setNewLabResult("");
     setIsLabResultModalOpen(false);
 
-    // Persist to backend
     try {
-      const response = await fetch(`http://localhost:8000/patients/${patient.id}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+      const res = await fetch(`http://localhost:8000/patients/${patient.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          lab_results_history: updatedHistory.map(entry => ({
-            id: entry.id,
-            date: entry.date.toISOString(),
-            results: entry.results,
-            added_by: entry.addedBy
-          }))
+          lab_results: {
+            id: `lab_${Date.now()}`, // optional, or omit and let backend/DB assign
+            date: new Date().toISOString(),
+            added_by: "Unknown",
+            results: newLabResult.trim(), // <-- plain string, not { value: ... }
+          },
         }),
       });
-
-      if (!response.ok) {
-        throw new Error('Failed to save lab result');
-      }
-
+      const text = await res.text();
+      if (!res.ok) throw new Error(`Save failed ${res.status}: ${text}`);
       toast({
         title: "Lab Result Added",
-        description: "The lab result has been successfully recorded.",
+        description: "Recorded successfully.",
       });
-    } catch (error) {
-      console.error('Error saving lab result:', error);
+    } catch (e) {
+      console.error("Error saving lab result:", e);
+      // rollback
+      setPatient(prev);
       toast({
         title: "Error",
-        description: "Failed to save lab result to server.",
+        description: "Failed to save lab result.",
         variant: "destructive",
       });
     }
   };
 
+  // --- OPTIONAL: Send ONE doctor note per submit (same pattern) ---
   const handleAddDoctorNote = async () => {
     if (!patient || !newDoctorNote.trim()) return;
-    
+
     const newEntry: DoctorNoteEntry = {
       id: `note_${Date.now()}`,
       date: new Date(),
-      note: newDoctorNote,
-      addedBy: 'Current User' // In a real app, this would come from auth context
+      note: newDoctorNote.trim(),
+      addedBy: "Current User",
     };
 
-    const updatedHistory = [...(patient.doctorNotesHistory || []), newEntry];
-    const updatedPatient = { ...patient, doctorNotesHistory: updatedHistory };
-    
-    // Update local state immediately for UI responsiveness
-    setPatient(updatedPatient);
-    setNewDoctorNote('');
+    const prev = patient;
+    const updated = {
+      ...patient,
+      doctorNotesHistory: [...(patient.doctorNotesHistory ?? []), newEntry],
+    };
+
+    // optimistic UI
+    setPatient(updated);
+    setNewDoctorNote("");
     setIsDoctorNoteModalOpen(false);
 
-    // Persist to backend
     try {
-      const response = await fetch(`http://localhost:8000/patients/${patient.id}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+      const res = await fetch(`http://localhost:8000/patients/${patient.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          doctors_notes_history: updatedHistory.map(entry => ({
-            id: entry.id,
-            date: entry.date.toISOString(),
-            note: entry.note,
-            added_by: entry.addedBy
-          }))
+          doctors_notes: 
+            {
+              id: newEntry.id,
+              date: toISO(newEntry.date),
+              note: newEntry.note,
+              added_by: newEntry.addedBy ?? null,
+            }, 
         }),
       });
-
-      if (!response.ok) {
-        throw new Error('Failed to save doctor note');
-      }
-
-      toast({
-        title: "Note Added",
-        description: "The doctor's note has been successfully recorded.",
-      });
-    } catch (error) {
-      console.error('Error saving doctor note:', error);
+      const text = await res.text();
+      if (!res.ok) throw new Error(`Save failed ${res.status}: ${text}`);
+      toast({ title: "Note Added", description: "Recorded successfully." });
+    } catch (e) {
+      console.error("Error saving doctor note:", e);
+      // rollback
+      setPatient(prev);
       toast({
         title: "Error",
-        description: "Failed to save doctor's note to server.",
+        description: "Couldn't save doctor's note.",
         variant: "destructive",
       });
     }
@@ -257,50 +252,71 @@ const PatientDetails = () => {
         const data = await response.json();
 
         if (!response.ok) {
-          throw new Error(data.detail || 'Failed to fetch patient');
+          throw new Error(data.detail || "Failed to fetch patient");
         }
 
+        const notesHist = data.doctors_notes_history || [];
+        const labsHist = (data.lab_results_history || []).map(
+          (e: any, i: number) => ({
+            id: e.id ?? `lab_${i}`,
+            date: asDate(e.date),
+            results: e.results ?? "",
+            addedBy: e.added_by ?? undefined,
+          })
+        );
         // Debug logging
-        console.log('API Response:', data);
-        console.log('Patient data:', data.patient);
-        console.log('Lab results history:', data.patient?.lab_results_history);
-        console.log('Doctor notes history:', data.patient?.doctors_notes_history);
+        console.log("API Response:", data);
+        console.log("Patient data:", data);
+        console.log("Lab results history:", data?.lab_results_history);
+        console.log("Doctor notes history:", data?.doctors_notes_history);
 
-        const [firstName, lastName] = data.patient.name.split(' ');
+        const [firstName, lastName] = data.name.split(" ");
 
-        const labResultsHistory = (data.patient.lab_results_history || []).map((entry: any) => ({
-          id: entry.id,
-          date: new Date(entry.date),
-          results: entry.results,
-          addedBy: entry.added_by,
-        }));
+        const labResultsHistory = (data.lab_results_history || []).map(
+          (entry: any) => ({
+            id: entry.id,
+            date: new Date(entry.date),
+            results: entry.results,
+            addedBy: entry.added_by,
+          })
+        );
 
-        const doctorNotesHistory = (data.patient.doctors_notes_history || []).map((entry: any) => ({
-          id: entry.id,
-          date: new Date(entry.date),
-          note: entry.note,
-          addedBy: entry.added_by,
-        }));
+        const doctorNotesHistory = (data.doctors_notes_history || []).map(
+          (entry: any) => ({
+            id: entry.id,
+            date: new Date(entry.date),
+            note: entry.note,
+            addedBy: entry.added_by,
+          })
+        );
 
-        const latestLabResult = data.patient.latest_lab_result || data.patient.lab_results_history?.[0] || null;
-        const latestDoctorNote = data.patient.latest_doctor_note || data.patient.doctors_notes_history?.[0] || null;
+        const latestLabResult =
+          data.latest_lab_result ||
+          data.patient.lab_results_history?.[0] ||
+          null;
+        const latestDoctorNote =
+          data.latest_doctor_note ||
+          data.patient.doctors_notes_history?.[0] ||
+          null;
 
         setPatient({
-          id: data.patient.patient_id,
-          firstName,
-          lastName,
-          recordNumber: data.patient.patient_id, // Use patient_id as record number
-          birthDate: data.patient.birthDate,
-          height: `${data.patient.height}`,
-          weight: `${data.patient.weight}`,
-          labResults: latestLabResult?.results || '',
-          doctorNotes: latestDoctorNote?.note || '',
+          id: data.patient_id,
+          firstName: firstName,
+          lastName: lastName,
+          recordNumber: data.patient_id, // Use patient_id as record number
+          birthDate: data.birthDate,
+          height: `${data.height}`,
+          weight: `${data.weight}`,
+          labResults: latestLabResult?.results || "",
+          doctorNotes: latestDoctorNote?.note || "",
           labResultsHistory,
           doctorNotesHistory,
-          severity: mapSeverity(data.patient.severity),
+          severity: mapSeverity(data.severity),
           createdAt: new Date(), // Optional: replace with actual timestamps
           updatedAt: new Date(),
         });
+
+        setTests([]);
       } catch (err: any) {
         setError(err.message);
       } finally {
@@ -328,7 +344,7 @@ const PatientDetails = () => {
         }
       } catch (err) {
         if (!cancelled) {
-          console.error('Error fetching test history:', err);
+          console.error("Error fetching test history:", err);
           setTests([]);
         }
       } finally {
@@ -383,20 +399,14 @@ const PatientDetails = () => {
                   {patient.firstName} {patient.lastName}
                 </h1>
                 <p className="text-muted-foreground mt-1">
-                  Record: {patient.recordNumber || 'N/A'}
+                  Record: {patient.recordNumber || "N/A"}
                 </p>
               </div>
             </div>
             <div className="flex items-center space-x-3">
-              {/* <Link to={`/patient/${id}/edit`}>
-                <Button variant="outline">
-                  <Edit className="mr-2 h-4 w-4" />
-                  Edit Patient
-                </Button>
-              </Link> */}
               <Button variant="outline" onClick={openForEdit}>
                 <Edit className="mr-2 h-4 w-4" />
-                Edit Patient  
+                Edit Patient
               </Button>
               <Link to={`/patient/${id}/test-selection`}>
                 <Button className="bg-primary hover:bg-primary-hover">
@@ -425,27 +435,37 @@ const PatientDetails = () => {
               <CardContent className="space-y-4">
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                   <div>
-                    <p className="text-sm font-medium text-muted-foreground">Date of Birth</p>
+                    <p className="text-sm font-medium text-muted-foreground">
+                      Date of Birth
+                    </p>
                     <p className="text-lg font-semibold">
-                      {patient.birthDate || 'N/A'}
+                      {patient.birthDate || "N/A"}
                       {patient.birthDate && (
                         <span className="text-sm text-muted-foreground ml-2">
                           (Age: {calculateAge(patient.birthDate)} years)
                         </span>
                       )}
                     </p>
-                    <p className="text-xs text-muted-foreground/70">YYYY-MM-DD format</p>
+                    <p className="text-xs text-muted-foreground/70">
+                      YYYY-MM-DD format
+                    </p>
                   </div>
                   <div>
-                    <p className="text-sm font-medium text-muted-foreground">Height</p>
+                    <p className="text-sm font-medium text-muted-foreground">
+                      Height
+                    </p>
                     <p className="text-lg font-semibold">{patient.height}</p>
                   </div>
                   <div>
-                    <p className="text-sm font-medium text-muted-foreground">Weight</p>
+                    <p className="text-sm font-medium text-muted-foreground">
+                      Weight
+                    </p>
                     <p className="text-lg font-semibold">{patient.weight}</p>
                   </div>
                   <div>
-                    <p className="text-sm font-medium text-muted-foreground">Severity</p>
+                    <p className="text-sm font-medium text-muted-foreground">
+                      Severity
+                    </p>
                     <p className="text-lg font-semibold">{patient.severity}</p>
                   </div>
                 </div>
@@ -454,18 +474,28 @@ const PatientDetails = () => {
 
                 <div>
                   <div className="flex items-center justify-between mb-4">
-                    <p className="text-sm font-medium text-muted-foreground">Lab Results History</p>
-                    <Button size="sm" variant="outline" onClick={() => setIsLabResultModalOpen(true)}>
+                    <p className="text-sm font-medium text-muted-foreground">
+                      Lab Results History
+                    </p>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setIsLabResultModalOpen(true)}
+                    >
                       <Plus className="mr-2 h-4 w-4" />
                       Add Lab Result
                     </Button>
                   </div>
                   <div className="space-y-3">
-                    {patient.labResultsHistory && patient.labResultsHistory.length > 0 ? (
+                    {patient.labResultsHistory &&
+                    patient.labResultsHistory.length > 0 ? (
                       patient.labResultsHistory
-                        .sort((a, b) => b.date.getTime() - a.date.getTime())
+                        .sort((a, b) => a.date.getTime() - b.date.getTime())
                         .map((entry) => (
-                          <div key={entry.id} className="border rounded-lg p-4 bg-card">
+                          <div
+                            key={entry.id}
+                            className="border rounded-lg p-4 bg-card"
+                          >
                             <div className="flex items-start justify-between mb-2">
                               <div className="flex items-center text-sm text-muted-foreground">
                                 <Stethoscope className="mr-2 h-4 w-4" />
@@ -485,7 +515,9 @@ const PatientDetails = () => {
                           </div>
                         ))
                     ) : (
-                      <p className="text-sm text-muted-foreground italic">No lab results recorded</p>
+                      <p className="text-sm text-muted-foreground italic">
+                        No lab results recorded
+                      </p>
                     )}
                   </div>
                 </div>
@@ -494,18 +526,28 @@ const PatientDetails = () => {
 
                 <div>
                   <div className="flex items-center justify-between mb-4">
-                    <p className="text-sm font-medium text-muted-foreground">Doctor's Notes History</p>
-                    <Button size="sm" variant="outline" onClick={() => setIsDoctorNoteModalOpen(true)}>
+                    <p className="text-sm font-medium text-muted-foreground">
+                      Doctor's Notes History
+                    </p>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setIsDoctorNoteModalOpen(true)}
+                    >
                       <Plus className="mr-2 h-4 w-4" />
                       Add Note
                     </Button>
                   </div>
                   <div className="space-y-3">
-                    {patient.doctorNotesHistory && patient.doctorNotesHistory.length > 0 ? (
+                    {patient.doctorNotesHistory &&
+                    patient.doctorNotesHistory.length > 0 ? (
                       patient.doctorNotesHistory
-                        .sort((a, b) => b.date.getTime() - a.date.getTime())
+                        .sort((a, b) => a.date.getTime() - b.date.getTime())
                         .map((entry) => (
-                          <div key={entry.id} className="border rounded-lg p-4 bg-muted/50">
+                          <div
+                            key={entry.id}
+                            className="border rounded-lg p-4 bg-muted/50"
+                          >
                             <div className="flex items-start justify-between mb-2">
                               <div className="flex items-center text-sm text-muted-foreground">
                                 <User className="mr-2 h-4 w-4" />
@@ -525,7 +567,9 @@ const PatientDetails = () => {
                           </div>
                         ))
                     ) : (
-                      <p className="text-sm text-muted-foreground italic">No doctor's notes recorded</p>
+                      <p className="text-sm text-muted-foreground italic">
+                        No doctor's notes recorded
+                      </p>
                     )}
                   </div>
                 </div>
@@ -560,17 +604,30 @@ const PatientDetails = () => {
                     </div>
                   ) : filteredTests.length > 0 ? (
                     filteredTests.map((test) => {
-                      const badgeVariant = test.indicator ? indicatorBadgeClasses[test.indicator.color] : indicatorBadgeClasses.muted;
+                      const badgeVariant = test.indicator
+                        ? indicatorBadgeClasses[test.indicator.color]
+                        : indicatorBadgeClasses.muted;
                       const typeStyle = testTypeStyles[test.type];
                       const metaPieces: string[] = [];
-                      if (typeof test.frameCount === 'number' && Number.isFinite(test.frameCount)) {
+                      if (
+                        typeof test.frameCount === "number" &&
+                        Number.isFinite(test.frameCount)
+                      ) {
                         metaPieces.push(`${test.frameCount} frames`);
                       }
-                      if (typeof test.fps === 'number' && Number.isFinite(test.fps)) {
+                      if (
+                        typeof test.fps === "number" &&
+                        Number.isFinite(test.fps)
+                      ) {
                         metaPieces.push(`${test.fps.toFixed(1)} fps`);
                       }
-                      if (typeof test.similarity === 'number' && Number.isFinite(test.similarity)) {
-                        metaPieces.push(`Similarity ${(test.similarity * 100).toFixed(1)}%`);
+                      if (
+                        typeof test.similarity === "number" &&
+                        Number.isFinite(test.similarity)
+                      ) {
+                        metaPieces.push(
+                          `Similarity ${(test.similarity * 100).toFixed(1)}%`
+                        );
                       }
 
                       return (
@@ -581,21 +638,28 @@ const PatientDetails = () => {
                           <div className="flex items-start justify-between gap-3">
                             <div className="space-y-1">
                               <div className="flex items-center gap-2">
-                                <h4 className="font-medium text-sm">{test.name}</h4>
+                                <h4 className="font-medium text-sm">
+                                  {test.name}
+                                </h4>
                                 <Badge
                                   variant="outline"
                                   className={`uppercase tracking-wide text-[10px] ${typeStyle.badge}`}
                                 >
-                                  {test.type.replace(/-/g, ' ')}
+                                  {test.type.replace(/-/g, " ")}
                                 </Badge>
                               </div>
                               <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
                                 <span className="inline-flex items-center gap-1">
                                   <Calendar className="h-3 w-3" />
-                                  {test.date ? test.date.toLocaleString() : 'Unknown date'}
+                                  {test.date
+                                    ? test.date.toLocaleString()
+                                    : "Unknown date"}
                                 </span>
                                 {metaPieces.map((piece) => (
-                                  <span key={piece} className="inline-flex items-center gap-1">
+                                  <span
+                                    key={piece}
+                                    className="inline-flex items-center gap-1"
+                                  >
                                     <span className="opacity-50">•</span>
                                     {piece}
                                   </span>
@@ -608,16 +672,32 @@ const PatientDetails = () => {
                           </div>
                           <div className="mt-3 flex flex-wrap gap-2">
                             {test.summaryAvailable && (
-                              <Link to={`/patient/${id}/video-summary/${encodeURIComponent(test.id)}`}>
-                                <Button size="sm" variant="outline" className="w-full sm:w-auto">
+                              <Link
+                                to={`/patient/${id}/video-summary/${encodeURIComponent(
+                                  test.id
+                                )}`}
+                              >
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="w-full sm:w-auto"
+                                >
                                   <Play className="mr-2 h-3 w-3" />
                                   View Results
                                 </Button>
                               </Link>
                             )}
                             {test.videoUrl && (
-                              <a href={test.videoUrl} target="_blank" rel="noreferrer">
-                                <Button size="sm" variant="ghost" className="w-full sm:w-auto">
+                              <a
+                                href={test.videoUrl}
+                                target="_blank"
+                                rel="noreferrer"
+                              >
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  className="w-full sm:w-auto"
+                                >
                                   Open Recording
                                 </Button>
                               </a>
@@ -629,12 +709,16 @@ const PatientDetails = () => {
                   ) : tests.length > 0 ? (
                     <div className="text-center py-8">
                       <FileText className="mx-auto h-8 w-8 text-muted-foreground mb-2" />
-                      <p className="text-sm text-muted-foreground">No tests match "{testSearch}"</p>
+                      <p className="text-sm text-muted-foreground">
+                        No tests match "{testSearch}"
+                      </p>
                     </div>
                   ) : (
                     <div className="text-center py-8">
                       <FileText className="mx-auto h-8 w-8 text-muted-foreground mb-2" />
-                      <p className="text-sm text-muted-foreground">No tests recorded yet</p>
+                      <p className="text-sm text-muted-foreground">
+                        No tests recorded yet
+                      </p>
                       <Link to={`/patient/${id}/test-selection`}>
                         <Button size="sm" className="mt-3">
                           <Plus className="mr-2 h-3 w-3" />
@@ -652,9 +736,11 @@ const PatientDetails = () => {
 
       {/* Edit Patient pop up*/}
       <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>
-        <DialogContent>
+        <DialogContent aria-describedby={undefined}>
           <DialogHeader>
-            <DialogTitle className="mb-4 text-lg font-semibold">Edit Patient Details</DialogTitle>
+            <DialogTitle className="mb-4 text-lg font-semibold">
+              Edit Patient Details
+            </DialogTitle>
           </DialogHeader>
           <form onSubmit={handleEditSubmit} className="space-y-4">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -663,7 +749,9 @@ const PatientDetails = () => {
                 <Input
                   id="firstName"
                   value={editData.firstName ?? ""}
-                  onChange={(e) => setEditData(d => ({ ...d, firstName: e.target.value }))}
+                  onChange={(e) =>
+                    setEditData((d) => ({ ...d, firstName: e.target.value }))
+                  }
                 />
               </div>
               <div>
@@ -671,7 +759,9 @@ const PatientDetails = () => {
                 <Input
                   id="lastName"
                   value={editData.lastName ?? ""}
-                  onChange={(e) => setEditData(d => ({ ...d, lastName: e.target.value }))}
+                  onChange={(e) =>
+                    setEditData((d) => ({ ...d, lastName: e.target.value }))
+                  }
                 />
               </div>
               <div>
@@ -680,19 +770,26 @@ const PatientDetails = () => {
                   id="birthDate"
                   type="date"
                   value={editData.birthDate ?? ""}
-                  onChange={(e) => setEditData(d => ({ ...d, birthDate: e.target.value }))}
+                  onChange={(e) =>
+                    setEditData((d) => ({ ...d, birthDate: e.target.value }))
+                  }
                 />
               </div>
               <div>
                 <Label htmlFor="severity">Severity</Label>
                 <Select
                   value={editData.severity ?? "Stage 1"}
-                  onValueChange={(v) => setEditData(d => ({ ...d, severity: v as Patient["severity"] }))}
+                  onValueChange={(v) =>
+                    setEditData((d) => ({
+                      ...d,
+                      severity: v as Patient["severity"],
+                    }))
+                  }
                 >
                   <SelectTrigger id="severity">
                     <SelectValue placeholder="Select severity" />
                   </SelectTrigger>
-                  <SelectContent position='popper' className="z-[60]">
+                  <SelectContent position="popper" className="z-[60]">
                     <SelectItem value="Stage 1">Stage 1</SelectItem>
                     <SelectItem value="Stage 2">Stage 2</SelectItem>
                     <SelectItem value="Stage 3">Stage 3</SelectItem>
@@ -707,7 +804,9 @@ const PatientDetails = () => {
                   id="height"
                   placeholder="e.g., 170 cm"
                   value={editData.height ?? ""}
-                  onChange={(e) => setEditData(d => ({ ...d, height: e.target.value }))}
+                  onChange={(e) =>
+                    setEditData((d) => ({ ...d, height: e.target.value }))
+                  }
                 />
               </div>
               <div>
@@ -716,7 +815,9 @@ const PatientDetails = () => {
                   id="weight"
                   placeholder="e.g., 70 kg"
                   value={editData.weight ?? ""}
-                  onChange={(e) => setEditData(d => ({ ...d, weight: e.target.value }))}
+                  onChange={(e) =>
+                    setEditData((d) => ({ ...d, weight: e.target.value }))
+                  }
                 />
               </div>
             </div>
@@ -727,7 +828,9 @@ const PatientDetails = () => {
                 id="labResults"
                 rows={3}
                 value={editData.labResults ?? ""}
-                onChange={(e) => setEditData(d => ({ ...d, labResults: e.target.value }))}
+                onChange={(e) =>
+                  setEditData((d) => ({ ...d, labResults: e.target.value }))
+                }
               />
             </div>
 
@@ -737,12 +840,18 @@ const PatientDetails = () => {
                 id="doctorNotes"
                 rows={4}
                 value={editData.doctorNotes ?? ""}
-                onChange={(e) => setEditData(d => ({ ...d, doctorNotes: e.target.value }))}
+                onChange={(e) =>
+                  setEditData((d) => ({ ...d, doctorNotes: e.target.value }))
+                }
               />
             </div>
 
             <div className="flex justify-end gap-2 pt-2">
-              <Button type="button" variant="outline" onClick={() => setIsEditOpen(false)}>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setIsEditOpen(false)}
+              >
                 Cancel
               </Button>
               <Button type="submit">Save</Button>
@@ -752,8 +861,11 @@ const PatientDetails = () => {
       </Dialog>
 
       {/* Lab Result Modal */}
-      <Dialog open={isLabResultModalOpen} onOpenChange={setIsLabResultModalOpen}>
-        <DialogContent className="sm:max-w-md">
+      <Dialog
+        open={isLabResultModalOpen}
+        onOpenChange={setIsLabResultModalOpen}
+      >
+        <DialogContent aria-describedby={undefined} className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Add Lab Result</DialogTitle>
           </DialogHeader>
@@ -770,10 +882,16 @@ const PatientDetails = () => {
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setIsLabResultModalOpen(false)}>
+            <Button
+              variant="outline"
+              onClick={() => setIsLabResultModalOpen(false)}
+            >
               Cancel
             </Button>
-            <Button onClick={handleAddLabResult} disabled={!newLabResult.trim()}>
+            <Button
+              onClick={handleAddLabResult}
+              disabled={!newLabResult.trim()}
+            >
               Add Result
             </Button>
           </DialogFooter>
@@ -781,8 +899,11 @@ const PatientDetails = () => {
       </Dialog>
 
       {/* Doctor Note Modal */}
-      <Dialog open={isDoctorNoteModalOpen} onOpenChange={setIsDoctorNoteModalOpen}>
-        <DialogContent className="sm:max-w-md">
+      <Dialog
+        open={isDoctorNoteModalOpen}
+        onOpenChange={setIsDoctorNoteModalOpen}
+      >
+        <DialogContent aria-describedby={undefined} className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Add Doctor's Note</DialogTitle>
           </DialogHeader>
@@ -799,18 +920,22 @@ const PatientDetails = () => {
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setIsDoctorNoteModalOpen(false)}>
+            <Button
+              variant="outline"
+              onClick={() => setIsDoctorNoteModalOpen(false)}
+            >
               Cancel
             </Button>
-            <Button onClick={handleAddDoctorNote} disabled={!newDoctorNote.trim()}>
+            <Button
+              onClick={handleAddDoctorNote}
+              disabled={!newDoctorNote.trim()}
+            >
               Add Note
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
-
-
   );
 };
 

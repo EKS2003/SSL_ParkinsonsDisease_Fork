@@ -83,6 +83,7 @@ class TemplateLibrary:
         )
 
 # ================== FEATURE EXTRACTION ==================
+#Should either be positional scaled or statistically scaled
 def _hands_features(kp: Dict) -> Optional[np.ndarray]:
     """
     Use ALL Mediapipe hand landmarks (21).
@@ -120,13 +121,55 @@ def _pose_features(kp: Dict, use_z: bool = False) -> Optional[np.ndarray]:
         shoulder_w = np.linalg.norm(pts[11] - pts[12]) + 1e-6
         return (rel / shoulder_w).reshape(-1)  # (66,)
 
+def _select_finger_features(kp_array: np.ndarray) -> np.ndarray:
+    """Select only finger-related features from hand keypoints array."""
+    # Hand landmarks indices for fingers (excluding wrist)
+    finger_indices = [
+       3, 4,    # Thumb
+         7, 8,    # Index
+    ]
+    selected = []
+    for idx in finger_indices:
+        selected.extend([kp_array[idx * 2], kp_array[idx * 2 + 1]])  # x and y
+    return np.array(selected, dtype=np.float32)
+
 def extract_features(model: str, kp: Dict, use_z: bool = False) -> Optional[np.ndarray]:
     if model == "hands":
         return _hands_features(kp)
     if model == "pose":
         return _pose_features(kp, use_z=use_z)
+    if model == "finger":
+        kp = _hands_features(kp)
+        kp = _select_finger_features(kp)
+        return kp
     return None
 
+#================== AMPLITUDE AND SPEED CALCULATION ==================
+def calculate_amplitude(X: np.ndarray) -> np.ndarray:
+    """Calculate amplitude (magnitude) of each feature vector in X."""
+    return np.linalg.norm(X, axis=1)
+
+def calculate_speed(X: np.ndarray) -> np.ndarray:
+    """Calculate speed (first derivative) of feature vectors in X."""
+    diffs = np.diff(X, axis=0, prepend=X[0:1, :])
+    return np.linalg.norm(diffs, axis=1)
+
+
+def _dtw_with_optional_sakoe(a, b, sakoe_radius: Optional[int]):
+    if sakoe_radius is not None:
+        path, total = dtw_path(
+            a, b,
+            global_constraint="sakoe_chiba",
+            sakoe_chiba_radius=int(sakoe_radius),
+        )
+    else:
+        path, total = dtw_path(a, b)
+    return path, float(total)
+
+def normalize_dtw(dtw: float, L_avg: float, R_data: float, eps: float = 1e-6) -> float:
+    norm_scale = max(L_avg * max(R_data, eps), eps)
+
+    return float(1.0 / (1.0 + dtw / norm_scale))
 # ================== SAVE ARTIFACTS ==================
 def save_dtw_npz(
     save_root: str | None,
@@ -135,10 +178,20 @@ def save_dtw_npz(
     model: str,
     X_live: np.ndarray,
     Y_ref: np.ndarray,
-    path_pairs: List[Tuple[int, int]],
-    local_costs: np.ndarray,
-    aligned_ref_by_live: np.ndarray,
-    meta: Dict
+    AX_live: np.ndarray,
+    AY_ref: np.ndarray,
+    SX_live: np.ndarray,
+    SY_ref: np.ndarray,
+    pos_path_pairs: List[Tuple[int, int]],
+    pos_local_costs: np.ndarray,
+    pos_aligned_ref_by_live: np.ndarray,
+    amp_path_pairs: List[Tuple[int, int]],
+    amp_local_costs: np.ndarray,
+    amp_aligned_ref_by_live: np.ndarray,
+    spd_path_pairs: List[Tuple[int, int]],
+    spd_local_costs: np.ndarray,
+    spd_aligned_ref_by_live: np.ndarray,
+    meta: Dict,
 ) -> Dict:
     canonical = normalize_test_name(test_name)
     if canonical not in ALLOWED_TESTS:
@@ -155,9 +208,19 @@ def save_dtw_npz(
         folder / "dtw_artifacts.npz",
         X_live=X_live,
         Y_ref=Y_ref,
-        path=np.asarray(path_pairs, dtype=np.int32),
-        local_costs=local_costs.astype(np.float32),
-        aligned_ref_by_live=aligned_ref_by_live.astype(np.int32),
+        AX_live=AX_live,
+        AY_ref=AY_ref,
+        SX_live=SX_live,
+        SY_ref=SY_ref,
+        pos_path=np.asarray(pos_path_pairs, dtype=np.int32),
+        pos_local_costs=pos_local_costs.astype(np.float32),
+        pos_aligned_ref_by_live=pos_aligned_ref_by_live.astype(np.int32),
+        amp_path=np.asarray(amp_path_pairs, dtype=np.int32),
+        amp_local_costs=amp_local_costs.astype(np.float32),
+        amp_aligned_ref_by_live=amp_aligned_ref_by_live.astype(np.int32),
+        spd_path=np.asarray(spd_path_pairs, dtype=np.int32),
+        spd_local_costs=spd_local_costs.astype(np.float32),
+        spd_aligned_ref_by_live=spd_aligned_ref_by_live.astype(np.int32),
     )
 
     meta_out = {
@@ -217,6 +280,7 @@ class EndOnlyDTW:
         else:
             self._pushed_drops += 1
 
+    #Changing this to return save speed dtw, amplitude, and positional dtw
     def finalize_and_save(self, meta_sidecar: Dict) -> Dict:
         if self.init_error:
             return {"ok": False, "where": "init", "message": self.init_error}
@@ -235,50 +299,125 @@ class EndOnlyDTW:
         Y = self.X_ref.astype(np.float32)                   # (T_ref, D)
 
         if X.shape[1] != Y.shape[1]:
-            return {"ok": False, "where": "finalize",
-                    "message": f"Dim mismatch: live D={X.shape[1]} vs ref D={Y.shape[1]}"}
+            return {
+                "ok": False,
+                "where": "finalize",
+                "message": f"Dim mismatch: live D={X.shape[1]} vs ref D={Y.shape[1]}",
+            }
 
-        if self.sakoe_radius is None:
-            path, total = dtw_path(X, Y)
+        # ---------- AMPLITUDE ----------
+        AX = calculate_amplitude(X)  # (T_live,)
+        AY = calculate_amplitude(Y)  # (T_ref,)
+
+        amp_path, amp_total = _dtw_with_optional_sakoe(AX, AY, self.sakoe_radius)
+        R_amp = float(AY.max() - AY.min())
+        L_amp = 0.5 * (len(AX) + len(AY))
+
+        S_amp = amp_total
+
+        amp_local_costs = np.fromiter(
+            (abs(AX[i] - AY[j]) for (i, j) in amp_path),
+            dtype=np.float32,
+            count=len(amp_path),
+        )
+        amp_aligned_ref_by_live = np.full(len(AX), -1, dtype=int)
+        for i, j in amp_path:
+            amp_aligned_ref_by_live[i] = j
+
+        # ---------- SPEED ----------
+        SX = calculate_speed(X)  # (T_live-1,)
+        SY = calculate_speed(Y)  # (T_ref-1,)
+
+        if len(SX) > 0 and len(SY) > 0:
+            s_path, s_total = _dtw_with_optional_sakoe(SX, SY, self.sakoe_radius)
+            R_spd = float(SY.max() - SY.min())
+            L_spd = 0.5 * (len(SX) + len(SY))
+            S_spd = s_total
+
+            spd_local_costs = np.fromiter(
+                (abs(SX[i] - SY[j]) for (i, j) in s_path),
+                dtype=np.float32,
+                count=len(s_path),
+            )
+            spd_aligned_ref_by_live = np.full(len(SX), -1, dtype=int)
+            for i, j in s_path:
+                spd_aligned_ref_by_live[i] = j
         else:
-            path, total = dtw_path(X, Y, global_constraint="sakoe_chiba",
-                                   sakoe_chiba_radius=int(self.sakoe_radius))
+            s_path, s_total = [], 0.0
+            R_spd, L_spd, S_spd = 0.0, max(len(SX), len(SY), 1), 1.0
+            spd_local_costs = np.zeros(0, dtype=np.float32)
+            spd_aligned_ref_by_live = np.full(len(SX), -1, dtype=int)
 
-        local_costs = np.fromiter((np.linalg.norm(X[i] - Y[j]) for (i, j) in path),
-                                  dtype=np.float32, count=len(path))
-        aligned_ref_by_live = np.full(len(X), -1, dtype=int)
-        for i, j in path:
-            aligned_ref_by_live[i] = j
+        # ---------- POSITION ----------
+        pos_path, pos_total = _dtw_with_optional_sakoe(X, Y, self.sakoe_radius)
 
-        avg_step = float(total / max(1, len(path)))
-        similarity = float(np.exp(-avg_step))
+        pos_local_costs = np.fromiter(
+            (np.linalg.norm(X[i] - Y[j]) for (i, j) in pos_path),
+            dtype=np.float32,
+            count=len(pos_path),
+        )
+        pos_aligned_ref_by_live = np.full(len(X), -1, dtype=int)
+        for i, j in pos_path:
+            pos_aligned_ref_by_live[i] = j
 
-        artifacts = save_dtw_npz(
+        R_pos = float((Y.max(axis=0) - Y.min(axis=0)).max())
+        L_pos = 0.5 * (len(X) + len(Y))
+
+        S_pos = pos_total
+
+        # ---------- COMBINED SCORE ----------
+        S_overall = (S_pos + S_amp + S_spd) / 3.0
+        avg_step_pos = float(pos_total / max(1, len(pos_path)))
+
+        save_dtw_npz(
             save_root=None,
             test_name=self.test_name,
-            test_id = self.test_id,
+            test_id=self.test_id,
             model=self.model,
-            X_live=X, Y_ref=Y,
-            path_pairs=path,
-            local_costs=local_costs,
-            aligned_ref_by_live=aligned_ref_by_live,
-            meta={"distance": float(total), "avg_step_cost": avg_step,
-                  "similarity": similarity, **meta_sidecar}
+            X_live=X,
+            Y_ref=Y,
+            AX_live=AX,
+            AY_ref=AY,
+            SX_live=SX,
+            SY_ref=SY,
+            pos_path_pairs=pos_path,
+            pos_local_costs=pos_local_costs,
+            pos_aligned_ref_by_live=pos_aligned_ref_by_live,
+            amp_path_pairs=amp_path,
+            amp_local_costs=amp_local_costs,
+            amp_aligned_ref_by_live=amp_aligned_ref_by_live,
+            spd_path_pairs=s_path,
+            spd_local_costs=spd_local_costs,
+            spd_aligned_ref_by_live=spd_aligned_ref_by_live,
+            meta={
+                "pos_dtw": pos_total,
+                "amp_dtw": amp_total,
+                "spd_dtw": s_total,
+                "R_pos": R_pos,
+                "R_amp": R_amp,
+                "R_spd": R_spd,
+                "L_pos": L_pos,
+                "L_amp": L_amp,
+                "L_spd": L_spd,
+                "similarity_pos": S_pos,
+                "similarity_amp": S_amp,
+                "similarity_spd": S_spd,
+                "similarity_overall": S_overall,
+                "avg_step_pos": avg_step_pos,
+                **meta_sidecar,
+            },
         )
 
-        print(f"[DTW] ok save | test={self.test_name} model={self.model} "
-              f"frames={self._pushed_frames} feats={self._pushed_feats} path_len={len(path)}")
+        print(
+            f"[DTW] ok save | test={self.test_name} model={self.model} "
+            f"frames={self._pushed_frames} feats={self._pushed_feats} "
+            f"path_len={len(pos_path)} S_overall={S_overall:.4f}"
+        )
 
         return {
             "ok": True,
-            "distance": float(total),
-            "avg_step_cost": avg_step,
-            "similarity": similarity,
-            "live_len": int(len(X)),
-            "ref_len": int(len(Y)),
-            "frames_seen": self._pushed_frames,
-            "features_built": len(self.buf),
-            "artifacts": artifacts,
-            "test_name": artifacts["test_name"],
-            "session_id": artifacts["session_id"],
+            "similarity_overall": S_overall,
+            "similarity_pos": S_pos,
+            "similarity_amp": S_amp,
+            "similarity_spd": S_spd,
         }

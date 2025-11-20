@@ -100,8 +100,12 @@ def list_sessions(test_name: str) -> List[Dict[str, Any]]:
                 "model": meta.get("model"),
                 "live_len": meta.get("live_len"),
                 "ref_len": meta.get("ref_len"),
-                "distance": meta.get("distance"),
-                "similarity": meta.get("similarity"),
+                # backward-compatible distance/similarity
+                "distance_pos": meta.get("pos_dtw", meta.get("distance")),
+                "similarity_overall": meta.get("similarity_overall", meta.get("similarity")),
+                "similarity_pos": meta.get("similarity_pos"),
+                "similarity_amp": meta.get("similarity_amp"),
+                "similarity_spd": meta.get("similarity_spd"),
             })
         except Exception:
             continue
@@ -124,10 +128,20 @@ def get_series(
     except Exception as e:
         raise HTTPException(500, f"Failed to load artifacts: {e}")
 
-    local = npz.get("local_costs")
-    align = npz.get("aligned_ref_by_live")
-    if local is None or align is None:
-        raise HTTPException(500, "Corrupt artifacts: missing arrays")
+    # --- load new arrays from NPZ ---
+    pos_local = npz.get("pos_local_costs")
+    pos_align = npz.get("pos_aligned_ref_by_live")
+    amp_local = npz.get("amp_local_costs")
+    amp_align = npz.get("amp_aligned_ref_by_live")
+    spd_local = npz.get("spd_local_costs")
+    spd_align = npz.get("spd_aligned_ref_by_live")
+
+    if pos_local is None or pos_align is None:
+        raise HTTPException(500, "Corrupt artifacts: missing position arrays")
+    if amp_local is None or amp_align is None:
+        raise HTTPException(500, "Corrupt artifacts: missing amplitude arrays")
+    if spd_local is None or spd_align is None:
+        raise HTTPException(500, "Corrupt artifacts: missing speed arrays")
 
     try:
         meta = json.loads(meta_path.read_text())
@@ -141,21 +155,41 @@ def get_series(
         step = max(1, n // kmax)
         return list(range(0, n, step)), arr[::step].astype(float).tolist()
 
-    x_lc, y_lc = _downsample(local, max_points)
-    cum = (np.cumsum(local, dtype=np.float64) / (float(local.sum()) + 1e-9)).astype(float)
+    def _series_bundle(local: np.ndarray, align: np.ndarray) -> Dict[str, Any]:
+        x_lc, y_lc = _downsample(local, max_points)
+        # normalized cumulative progress along this path
+        cum = (np.cumsum(local, dtype=np.float64) /
+               (float(local.sum()) + 1e-9)).astype(float)
+        return {
+            "local_cost_path": {"x": x_lc, "y": y_lc},
+            "cumulative_progress": {
+                "x": list(range(len(cum))),
+                "y": cum.tolist(),
+            },
+            "alignment_map": {
+                "x": list(range(len(align))),
+                "y": align.astype(int).tolist(),
+            },
+        }
 
     return {
         "ok": True,
         "testName": test_name,
         "sessionId": session_id,
-        "distance": meta.get("distance"),
-        "avg_step_cost": meta.get("avg_step_cost"),
-        "similarity": meta.get("similarity"),
+        # meta: distances & similarities
+        "distance_pos": meta.get("pos_dtw", meta.get("distance")),
+        "distance_amp": meta.get("amp_dtw"),
+        "distance_spd": meta.get("spd_dtw"),
+        "avg_step_pos": meta.get("avg_step_pos", meta.get("avg_step_cost")),
+        "similarity_overall": meta.get("similarity_overall", meta.get("similarity")),
+        "similarity_pos": meta.get("similarity_pos"),
+        "similarity_amp": meta.get("similarity_amp"),
+        "similarity_spd": meta.get("similarity_spd"),
         "series": {
-            "local_cost_path": {"x": x_lc, "y": y_lc},
-            "cumulative_progress": {"x": list(range(len(cum))), "y": cum.tolist()},
-            "alignment_map": {"x": list(range(len(align))), "y": align.astype(int).tolist()},
-        }
+            "position": _series_bundle(pos_local, pos_align),
+            "amplitude": _series_bundle(amp_local, amp_align),
+            "speed": _series_bundle(spd_local, spd_align),
+        },
     }
 
 @router.get("/sessions/{test_name}/{session_id}/download")
@@ -175,7 +209,7 @@ def lookup_session(session_id: str) -> Dict[str, str]:
             continue
         if (t / session_id).is_dir():
             return {"testName": t.name, "sessionId": session_id}
-    raise HTTPException(404, "Session not found")
+    raise HTTPException(404, {"error": str(DTW_BASE)})
 
 def _infer_points_and_kpp(D: int, model: str) -> Tuple[int, int]:
     """
@@ -226,7 +260,7 @@ def get_channel_series(
         npz = np.load(npz_path, allow_pickle=False)
         X_live = npz["X_live"]          # (T_live, D)
         Y_ref  = npz["Y_ref"]           # (T_ref, D)
-        path   = npz["path"]            # (L, 2) int32
+        path   = npz["pos_path"]            # (L, 2) int32
     except Exception as e:
         raise HTTPException(500, f"Failed to load artifacts: {e}")
 
@@ -302,13 +336,7 @@ def get_channel_series(
         }
     }
 
-def _downsample(arr_x: np.ndarray, arr_y: np.ndarray, kmax: int):
-    n = int(len(arr_x))
-    if n <= kmax:
-        return arr_x.astype(int).tolist(), arr_y.astype(float).tolist()
-    step = max(1, n // kmax)
-    return arr_x[::step].astype(int).tolist(), arr_y[::step].astype(float).tolist()
-
+   
 # --- Aggregate one axis across many (or all) landmarks into a 1D series ---
 @router.get("/sessions/{test_name}/{session_id}/axis_agg")
 def get_axis_aggregate(
@@ -331,7 +359,7 @@ def get_axis_aggregate(
         npz = np.load(npz_path, allow_pickle=False)
         X_live = npz["X_live"]          # (T_live, D)
         Y_ref  = npz["Y_ref"]           # (T_ref, D)
-        path   = npz["path"]            # (L, 2) int32
+        path   = npz["pos_path"]            # (L, 2) int32
     except Exception as e:
         raise HTTPException(500, f"Failed to load artifacts: {e}")
 

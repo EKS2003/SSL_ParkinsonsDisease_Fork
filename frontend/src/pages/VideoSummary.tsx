@@ -1,24 +1,60 @@
 // frontend/src/pages/VideoSummary.tsx
-import React, { useState, useEffect, ReactNode } from 'react';
-import { useParams, Link } from 'react-router-dom';
-import { ArrowLeft, Download, Calendar, TrendingUp, FileText, BarChart3 } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import React, { useState, useEffect, ReactNode } from "react";
+import { useParams, Link } from "react-router-dom";
+import {
+  ArrowLeft,
+  Download,
+  Calendar,
+  TrendingUp,
+  FileText,
+  BarChart3,
+} from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import {
   ResponsiveContainer,
-  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
-  ComposedChart, Area, Label, Customized,
-} from 'recharts';
-import { Test } from '@/types/patient';
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  Legend,
+  ComposedChart,
+  Area,
+  Label,
+  Customized,
+} from "recharts";
+import { Test } from "@/types/patient";
+
+/* ========= Backend base URL for video + APIs =========
+   If you have a Vite proxy that maps `/api` -> http://localhost:8000,
+   keep API_BASE = "/api". If not, change it to "http://localhost:8000".
+*/
+const API_BASE =
+  (import.meta.env.VITE_API_BASE_URL as string | undefined) ?? "/api";
 
 /* ========================= Types ========================= */
 type DtwSessionMeta = {
   session_id: string;
   created_utc: string;
-  model?: 'hands' | 'pose';
+  model?: "hands" | "pose";
   live_len?: number;
   ref_len?: number;
   distance?: number;
@@ -27,80 +63,129 @@ type DtwSessionMeta = {
 
 type AxisAggResponse = {
   ok: boolean;
-  axis: 'x' | 'y' | 'z';
-  reduce: 'mean' | 'median' | 'pca1';
-  landmarks: 'all' | number[];
+  axis: "x" | "y" | "z";
+  reduce: "mean" | "median" | "pca1";
+  landmarks: "all" | number[];
   live: { x: number[]; y: number[] };
   ref: { x: number[]; y: number[] };
   path: { i: number[]; j: number[] };
   warped: { k: number[]; live: number[]; ref: number[] };
 };
 
+type DtwSeriesCurve = {
+  local_cost_path: { x: number[]; y: number[] };
+  cumulative_progress: { x: number[]; y: number[] };
+  alignment_map: { x: number[]; y: number[] };
+};
+
 type DtwSeriesMetrics = {
   ok: boolean;
-  distance: number;
-  avg_step_cost: number;
-  similarity: number;
+
+  // New distance / similarity fields from backend
+  distance_pos?: number;
+  distance_amp?: number;
+  distance_spd?: number;
+
+  avg_step_pos?: number;
+
+  similarity_overall?: number;
+  similarity_pos?: number;
+  similarity_amp?: number;
+  similarity_spd?: number;
+
+  // Backwards-compat (if backend still returns these)
+  distance?: number;
+  avg_step_cost?: number;
+  similarity?: number;
+
+  // Series for plotting DTW curves
+  series?: {
+    position: DtwSeriesCurve;
+    amplitude: DtwSeriesCurve;
+    speed: DtwSeriesCurve;
+  };
 };
 
 /* ===================== Mock (unchanged) ===================== */
 const mockTestHistory: Test[] = [
   {
-    id: 'stand-and-sit',
-    patientId: '1',
-    name: 'Stand and Sit Assessment',
-    type: 'stand-and-sit',
-    date: new Date('2024-01-20'),
-    status: 'completed',
-    results: { duration: 45, score: 78, keypoints: [], analysis: 'Moderate improvement in mobility' }
+    id: "stand-and-sit",
+    patientId: "1",
+    name: "Stand and Sit Assessment",
+    type: "stand-and-sit",
+    date: new Date("2024-01-20"),
+    status: "completed",
+    results: {
+      duration: 45,
+      score: 78,
+      keypoints: [],
+      analysis: "Moderate improvement in mobility",
+    },
   },
   {
-    id: 'palm-open',
-    patientId: '1',
-    name: 'Palm Open Evaluation',
-    type: 'fist-open-close',
-    date: new Date('2024-01-18'),
-    status: 'completed',
-    results: { duration: 30, score: 82, keypoints: [], analysis: 'Good hand dexterity maintained' }
-  }
+    id: "palm-open",
+    patientId: "1",
+    name: "Palm Open Evaluation",
+    type: "fist-open-close",
+    date: new Date("2024-01-18"),
+    status: "completed",
+    results: {
+      duration: 30,
+      score: 82,
+      keypoints: [],
+      analysis: "Good hand dexterity maintained",
+    },
+  },
 ];
 
 const mockStats = {
   averageScore: 77,
-  improvement: '+8%',
+  improvement: "+8%",
   totalTests: 12,
-  averageDuration: '42s',
-  tremor: 'Mild',
-  balance: 'Good',
-  coordination: 'Moderate',
-  mobility: 'Good'
+  averageDuration: "42s",
+  tremor: "Mild",
+  balance: "Good",
+  coordination: "Moderate",
+  mobility: "Good",
 };
 
 /* ======================= Helpers ======================= */
-const canonicalTests = ['stand-and-sit','finger-tapping','fist-open-close'] as const;
-type CanonicalTest = typeof canonicalTests[number];
+const canonicalTests = [
+  "stand-and-sit",
+  "finger-tapping",
+  "fist-open-close",
+] as const;
+type CanonicalTest = (typeof canonicalTests)[number];
 
 const isCanonical = (t?: string | null): t is CanonicalTest =>
   !!t && (canonicalTests as readonly string[]).includes(t);
 
 const normalizeTestKey = (t?: string | null): CanonicalTest | null => {
-  const s = (t ?? '').trim().toLowerCase();
-  if (s === 'finger-taping') return 'finger-tapping'; // typo guard
+  const s = (t ?? "").trim().toLowerCase();
+  if (s === "finger-taping") return "finger-tapping"; // typo guard
   return isCanonical(s) ? (s as CanonicalTest) : null;
 };
 
 async function fetchJSON<T>(url: string, signal?: AbortSignal): Promise<T> {
   const res = await fetch(url, { signal });
   if (!res.ok) {
-    const text = await res.text().catch(() => '');
+    const text = await res.text().catch(() => "");
     throw new Error(text || `HTTP ${res.status}`);
   }
   return res.json();
 }
 
-const Explainer = ({ title, children }: { title: string; children: ReactNode }) => (
+const Explainer = ({
+  title,
+  children,
+}: {
+  title: string;
+  children: ReactNode;
+}) => (
   <details className="text-xs bg-muted/50 rounded-md p-3">
-    <summary className="cursor-pointer select-none font-medium">{title}</summary>
+    <summary className="cursor-pointer select-none font-medium">
+      {title}
+    </summary>
     <div className="pt-2 text-muted-foreground leading-relaxed">{children}</div>
   </details>
 );
@@ -128,6 +213,34 @@ function makeAligned(k: number[], lv: number[], rv: number[]) {
   }));
 }
 
+type LocalCostSeriesData = { step: number; cost: number; cum?: number };
+
+function makeLocalCostData(
+  curve?: DtwSeriesCurve
+): LocalCostSeriesData[] {
+  if (!curve?.local_cost_path?.x || !curve.local_cost_path.y) return [];
+  const xs = curve.local_cost_path.x;
+  const ys = curve.local_cost_path.y;
+  const n = Math.min(xs.length, ys.length);
+  const base: LocalCostSeriesData[] = [];
+
+  // Optional cumulative (already normalized 0–1 by backend)
+  const cumX = curve.cumulative_progress?.x ?? [];
+  const cumY = curve.cumulative_progress?.y ?? [];
+
+  for (let i = 0; i < n; i++) {
+    const step = xs[i];
+    const cost = ys[i];
+    let cum: number | undefined = undefined;
+    if (i < cumX.length && i < cumY.length) {
+      cum = cumY[i];
+    }
+    base.push({ step, cost, cum });
+  }
+  return base;
+}
+
+
 /* === Custom overlay to draw vertical connectors (|live-ref|) === */
 type GapSegmentsProps = {
   data: { [k: string]: number | null }[];
@@ -140,11 +253,16 @@ type GapSegmentsProps = {
 };
 const GapSegments: React.FC<any & GapSegmentsProps> = (props) => {
   const {
-    data, xKey, y1Key, y2Key,
-    stroke = '#64748b', // slate-500
+    data,
+    xKey,
+    y1Key,
+    y2Key,
+    stroke = "#64748b", // slate-500
     strokeWidth = 1,
     opacity = 0.35,
-    xAxisMap, yAxisMap, offset,
+    xAxisMap,
+    yAxisMap,
+    offset,
   } = props;
 
   const xAxis = Object.values(xAxisMap || {})[0] as any;
@@ -153,8 +271,8 @@ const GapSegments: React.FC<any & GapSegmentsProps> = (props) => {
 
   const xScale = xAxis.scale;
   const yScale = yAxis.scale;
-  const xOff = (offset?.left ?? 0);
-  const yOff = (offset?.top ?? 0);
+  const xOff = offset?.left ?? 0;
+  const yOff = offset?.top ?? 0;
 
   return (
     <g className="gap-segments">
@@ -171,8 +289,10 @@ const GapSegments: React.FC<any & GapSegmentsProps> = (props) => {
         return (
           <line
             key={idx}
-            x1={cx} x2={cx}
-            y1={cy1} y2={cy2}
+            x1={cx}
+            x2={cx}
+            y1={cy1}
+            y2={cy2}
             stroke={stroke}
             strokeOpacity={opacity}
             strokeWidth={strokeWidth}
@@ -187,15 +307,15 @@ const GapSegments: React.FC<any & GapSegmentsProps> = (props) => {
 function DtwAggregatePanels({
   testKey,
   sessionId,
-  axis = 'x',             // 'x' | 'y' | 'z'
-  reduce = 'mean',        // 'mean' | 'median' | 'pca1'
-  landmarks = 'all',      // 'all' or '0,1,2'
-  maxPoints = 600,        // bigger by default (less downsampling when full width)
+  axis = "x", // 'x' | 'y' | 'z'
+  reduce = "mean", // 'mean' | 'median' | 'pca1'
+  landmarks = "all", // 'all' or '0,1,2'
+  maxPoints = 600, // bigger by default (less downsampling when full width)
 }: {
   testKey: string | null;
   sessionId: string | null;
-  axis?: 'x' | 'y' | 'z';
-  reduce?: 'mean' | 'median' | 'pca1';
+  axis?: "x" | "y" | "z";
+  reduce?: "mean" | "median" | "pca1";
   landmarks?: string;
   maxPoints?: number;
 }) {
@@ -204,34 +324,53 @@ function DtwAggregatePanels({
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    if (!testKey || !sessionId) { setData(null); setErr(null); return; }
+    if (!testKey || !sessionId) {
+      setData(null);
+      setErr(null);
+      return;
+    }
     let aborted = false;
     (async () => {
-      setLoading(true); setErr(null);
+      setLoading(true);
+      setErr(null);
       try {
         const res = await fetch(
-          `/api/dtw/sessions/${encodeURIComponent(testKey)}/${encodeURIComponent(sessionId)}/axis_agg` +
-          `?axis=${axis}&reduce=${reduce}&landmarks=${encodeURIComponent(landmarks)}&max_points=${maxPoints}`
+          `/api/dtw/sessions/${encodeURIComponent(
+            testKey
+          )}/${encodeURIComponent(sessionId)}/axis_agg` +
+            `?axis=${axis}&reduce=${reduce}&landmarks=${encodeURIComponent(
+              landmarks
+            )}&max_points=${maxPoints}`
         );
         const json = await res.json();
         if (!aborted) {
           if (json?.ok) setData(json as AxisAggResponse);
           else {
             setData(null);
-            setErr(json?.detail || 'Failed to load aggregated series');
+            setErr(json?.detail || "Failed to load aggregated series");
           }
         }
       } catch (e: any) {
-        if (!aborted) setErr(e?.message || 'Failed to load aggregated series');
+        if (!aborted) setErr(e?.message || "Failed to load aggregated series");
       } finally {
         if (!aborted) setLoading(false);
       }
     })();
-    return () => { aborted = true; };
+    return () => {
+      aborted = true;
+    };
   }, [testKey, sessionId, axis, reduce, landmarks, maxPoints]);
 
-  if (!testKey || !sessionId) return <p className="text-sm text-muted-foreground">Select a test & session.</p>;
-  if (loading) return <p className="text-sm text-muted-foreground">Loading aggregate {axis.toUpperCase()}…</p>;
+  if (!testKey || !sessionId)
+    return (
+      <p className="text-sm text-muted-foreground">Select a test & session.</p>
+    );
+  if (loading)
+    return (
+      <p className="text-sm text-muted-foreground">
+        Loading aggregate {axis.toUpperCase()}…
+      </p>
+    );
   if (err) return <p className="text-sm text-red-600">{err}</p>;
   if (!data) return <p className="text-sm text-muted-foreground">No data.</p>;
 
@@ -242,7 +381,11 @@ function DtwAggregatePanels({
   const path = makePath(data.path.i, data.path.j);
   const aligned = makeAligned(data.warped.k, data.warped.live, data.warped.ref);
 
-  const xCommonProps = { tickCount: 7, interval: 'preserveStartEnd' as const, padding: { left: 8, right: 8 } };
+  const xCommonProps = {
+    tickCount: 7,
+    interval: "preserveStartEnd" as const,
+    padding: { left: 8, right: 8 },
+  };
   const yCommonProps = { tickCount: 5 };
 
   return (
@@ -252,41 +395,76 @@ function DtwAggregatePanels({
         {/* Original Time Series */}
         <div className="col-span-9 h-[320px]">
           <ResponsiveContainer width="100%" height="100%">
-            <LineChart data={orig} margin={{ top: 8, right: 24, left: 0, bottom: 8 }}>
+            <LineChart
+              data={orig}
+              margin={{ top: 8, right: 24, left: 0, bottom: 8 }}
+            >
               <CartesianGrid strokeDasharray="3 3" />
               <XAxis dataKey="t" {...xCommonProps}>
-                <Label value="Series index (time)" offset={-4} position="insideBottom" />
+                <Label
+                  value="Series index (time)"
+                  offset={-4}
+                  position="insideBottom"
+                />
               </XAxis>
               <YAxis {...yCommonProps} />
               <Tooltip />
               <Legend />
-              <Line type="monotone" dataKey="live" name={`Live ${axisLabel} (aggregated)`} dot={false} strokeWidth={1.5} />
-              <Line type="monotone" dataKey="ref"  name={`Reference ${axisLabel} (aggregated)`}  dot={false} strokeWidth={1.5} />
+              <Line
+                type="monotone"
+                dataKey="live"
+                name={`Live ${axisLabel} (aggregated)`}
+                dot={false}
+                strokeWidth={1.5}
+              />
+              <Line
+                type="monotone"
+                dataKey="ref"
+                name={`Reference ${axisLabel} (aggregated)`}
+                dot={false}
+                strokeWidth={1.5}
+              />
             </LineChart>
           </ResponsiveContainer>
           <div className="text-xs text-muted-foreground mt-2">
-            <b>Original {axisLabel} Motion</b> — Live vs. Reference aggregated across landmarks (<i>{data.reduce}</i>).
+            <b>Original {axisLabel} Motion</b> — Live vs. Reference aggregated
+            across landmarks (<i>{data.reduce}</i>).
           </div>
         </div>
 
         {/* Shortest Path */}
         <div className="col-span-3 h-[320px]">
           <ResponsiveContainer width="100%" height="100%">
-            <LineChart data={path} margin={{ top: 8, right: 12, left: 0, bottom: 8 }}>
+            <LineChart
+              data={path}
+              margin={{ top: 8, right: 12, left: 0, bottom: 8 }}
+            >
               <CartesianGrid strokeDasharray="3 3" />
               <XAxis dataKey="i" {...xCommonProps}>
                 <Label value="Live index" offset={-4} position="insideBottom" />
               </XAxis>
               <YAxis dataKey="j" {...yCommonProps}>
-                <Label angle={-90} value="Reference index" position="insideLeft" offset={10} />
+                <Label
+                  angle={-90}
+                  value="Reference index"
+                  position="insideLeft"
+                  offset={10}
+                />
               </YAxis>
               <Tooltip />
               <Legend />
-              <Line type="stepAfter" dataKey="j" name="DTW shortest path" dot={false} strokeWidth={1.5} />
+              <Line
+                type="stepAfter"
+                dataKey="j"
+                name="DTW shortest path"
+                dot={false}
+                strokeWidth={1.5}
+              />
             </LineChart>
           </ResponsiveContainer>
           <div className="text-xs text-muted-foreground mt-2">
-            <b>DTW Shortest Path</b> — Staircase mapping from each live point to its aligned reference point.
+            <b>DTW Shortest Path</b> — Staircase mapping from each live point to
+            its aligned reference point.
           </div>
         </div>
       </div>
@@ -294,25 +472,61 @@ function DtwAggregatePanels({
       {/* -------- Bottom row: Aligned comparison (full width) -------- */}
       <div className="h-[420px]">
         <ResponsiveContainer width="100%" height="100%">
-          <ComposedChart data={aligned} margin={{ top: 8, right: 24, left: 0, bottom: 8 }}>
+          <ComposedChart
+            data={aligned}
+            margin={{ top: 8, right: 24, left: 0, bottom: 8 }}
+          >
             <CartesianGrid strokeDasharray="3 3" />
             <XAxis dataKey="k" {...xCommonProps}>
-              <Label value="DTW path step" offset={-4} position="insideBottom" />
+              <Label
+                value="DTW path step"
+                offset={-4}
+                position="insideBottom"
+              />
             </XAxis>
             <YAxis {...yCommonProps} />
             <Tooltip />
             <Legend />
-            <Area type="monotone" dataKey="gap" name="|Live–Ref|" fillOpacity={0.15} strokeOpacity={0} />
-            <Line type="monotone" dataKey="live" name="Live (aligned)" dot={false} strokeWidth={1.5} />
-            <Line type="monotone" dataKey="ref"  name="Reference (aligned)" dot={false} strokeWidth={1.5} />
-            <Customized component={
-              <GapSegments data={aligned} xKey="k" y1Key="live" y2Key="ref" stroke="#64748b" strokeWidth={1} opacity={0.35} />
-            }/>
+            <Area
+              type="monotone"
+              dataKey="gap"
+              name="|Live–Ref|"
+              fillOpacity={0.15}
+              strokeOpacity={0}
+            />
+            <Line
+              type="monotone"
+              dataKey="live"
+              name="Live (aligned)"
+              dot={false}
+              strokeWidth={1.5}
+            />
+            <Line
+              type="monotone"
+              dataKey="ref"
+              name="Reference (aligned)"
+              dot={false}
+              strokeWidth={1.5}
+            />
+            <Customized
+              component={
+                <GapSegments
+                  data={aligned}
+                  xKey="k"
+                  y1Key="live"
+                  y2Key="ref"
+                  stroke="#64748b"
+                  strokeWidth={1}
+                  opacity={0.35}
+                />
+              }
+            />
           </ComposedChart>
         </ResponsiveContainer>
         <div className="text-xs text-muted-foreground mt-2">
-          <b>Aligned {axisLabel} Motion</b> — After DTW, both series share a common timeline. Vertical lines show paired points used
-          by DTW; shorter lines and a lighter band mean closer agreement.
+          <b>Aligned {axisLabel} Motion</b> — After DTW, both series share a
+          common timeline. Vertical lines show paired points used by DTW;
+          shorter lines and a lighter band mean closer agreement.
         </div>
       </div>
     </div>
@@ -324,7 +538,7 @@ const VideoSummary = () => {
   const { id, testId } = useParams<{ id: string; testId: string }>();
 
   // tests & videos
-  const [selectedHistoryFilter, setSelectedHistoryFilter] = useState('all');
+  const [selectedHistoryFilter, setSelectedHistoryFilter] = useState("all");
   const [testHistory] = useState<Test[]>(mockTestHistory);
   const [videoList, setVideoList] = useState<string[]>([]);
   const [selectedVideo, setSelectedVideo] = useState<string | null>(null);
@@ -336,17 +550,39 @@ const VideoSummary = () => {
   const [routeResolved, setRouteResolved] = useState<boolean>(false);
   const [errMsg, setErrMsg] = useState<string | null>(null);
   const [maxPoints, setMaxPoints] = useState<number>(600);
-  const [axis, setAxis] = useState<'x' | 'y'>('x');
+  const [axis, setAxis] = useState<"x" | "y">("x");
 
   // KPI metrics
   const [metrics, setMetrics] = useState<DtwSeriesMetrics | null>(null);
   const [metricsLoading, setMetricsLoading] = useState(false);
   const [metricsErr, setMetricsErr] = useState<string | null>(null);
 
-  const currentTest = testHistory.find(t => t.type === testId) || testHistory[0];
-  const filteredHistory = testHistory.filter(test =>
-    selectedHistoryFilter === 'all' || test.type === selectedHistoryFilter
+  const currentTest =
+    testHistory.find((t) => t.type === testId) || testHistory[0];
+  const filteredHistory = testHistory.filter(
+    (test) =>
+      selectedHistoryFilter === "all" || test.type === selectedHistoryFilter
   );
+
+  // Normalize selectedVideo in case backend returns "recordings/xyz.mp4"
+  const normalizedVideoName =
+    selectedVideo?.startsWith("recordings/")
+      ? selectedVideo.split("/").slice(-1)[0]
+      : selectedVideo || null;
+
+  const videoSrc =
+    normalizedVideoName != null
+      ? `${API_BASE}/recordings/${encodeURIComponent(normalizedVideoName)}`
+      : null;
+
+  useEffect(() => {
+    if (normalizedVideoName && videoSrc) {
+      // This helps you see in DevTools exactly what URL is being used
+      // and what filename the backend thinks you're requesting.
+      console.log("Selected video:", normalizedVideoName);
+      console.log("Video src URL:", videoSrc);
+    }
+  }, [normalizedVideoName, videoSrc]);
 
   // Resolve route: testId may be a test type OR a session id
   useEffect(() => {
@@ -360,20 +596,27 @@ const VideoSummary = () => {
       setRouteResolved(true);
       return;
     }
-    if (!testId) { setRouteResolved(true); return; }
+    if (!testId) {
+      setRouteResolved(true);
+      return;
+    }
 
     const ctrl = new AbortController();
     (async () => {
       try {
         const data = await fetchJSON<{ testName: string; sessionId: string }>(
-          `/api/dtw/sessions/lookup/${encodeURIComponent(testId)}`, ctrl.signal
+          `/api/dtw/sessions/lookup/${encodeURIComponent(testId)}`,
+          ctrl.signal
         );
         const key = normalizeTestKey(data.testName);
-        if (!key) throw new Error(`Unknown DTW test '${data.testName}' for session '${data.sessionId}'`);
+        if (!key)
+          throw new Error(
+            `Unknown DTW test '${data.testName}' for session '${data.sessionId}'`
+          );
         setTestKey(key);
         setSessionId(data.sessionId);
       } catch (e: any) {
-        setErrMsg(e?.message || 'Failed to resolve session from URL');
+        setErrMsg(e?.message || "Failed to resolve session from URL");
         setTestKey(null);
         setSessionId(null);
       } finally {
@@ -384,15 +627,17 @@ const VideoSummary = () => {
     return () => ctrl.abort();
   }, [testId]);
 
-  // Videos
+  // Videos list
   useEffect(() => {
     if (!routeResolved || !id || !testKey) return;
     const ctrl = new AbortController();
     (async () => {
       try {
         const data = await fetchJSON<{ success: boolean; videos: string[] }>(
-          `/api/videos/${encodeURIComponent(id)}/${encodeURIComponent(testKey)}`, ctrl.signal
+          `/videos/${encodeURIComponent(id)}/${encodeURIComponent(testKey)}`,
+          ctrl.signal
         );
+        console.log("Videos API response:", data);
         if (data.success && data.videos?.length > 0) {
           setVideoList(data.videos);
           setSelectedVideo(data.videos[0]);
@@ -400,7 +645,8 @@ const VideoSummary = () => {
           setVideoList([]);
           setSelectedVideo(null);
         }
-      } catch {
+      } catch (e) {
+        console.error("Error fetching videos:", e);
         setVideoList([]);
         setSelectedVideo(null);
       }
@@ -415,10 +661,11 @@ const VideoSummary = () => {
     (async () => {
       try {
         const data = await fetchJSON<DtwSessionMeta[]>(
-          `/api/dtw/sessions/${encodeURIComponent(testKey)}`, ctrl.signal
+          `/api/dtw/sessions/${encodeURIComponent(testKey)}`,
+          ctrl.signal
         );
         setSessions(data);
-        setSessionId(prev => prev ?? data[0]?.session_id ?? null);
+        setSessionId((prev) => prev ?? data[0]?.session_id ?? null);
       } catch (e: any) {
         setSessions([]);
         setSessionId(null);
@@ -430,19 +677,27 @@ const VideoSummary = () => {
 
   // Fetch KPI metrics (distance, avg step cost, similarity) from /series
   useEffect(() => {
-    if (!testKey || !sessionId) { setMetrics(null); setMetricsErr(null); return; }
+    if (!testKey || !sessionId) {
+      setMetrics(null);
+      setMetricsErr(null);
+      return;
+    }
     const ctrl = new AbortController();
     (async () => {
       try {
-        setMetricsLoading(true); setMetricsErr(null);
-        const data = await fetchJSON<DtwSeriesMetrics>(
-          `/api/dtw/sessions/${encodeURIComponent(testKey)}/${encodeURIComponent(sessionId)}/series?max_points=200`,
+        setMetricsLoading(true);
+        setMetricsErr(null);
+        const data = await fetchJSON<any>(
+          `/api/dtw/sessions/${encodeURIComponent(
+            testKey
+          )}/${encodeURIComponent(sessionId)}/series?max_points=200`,
           ctrl.signal
         );
-        setMetrics(data);
+        setMetrics(data as DtwSeriesMetrics);
+
       } catch (e: any) {
         setMetrics(null);
-        setMetricsErr(e?.message || 'Failed to load DTW metrics');
+        setMetricsErr(e?.message || "Failed to load DTW metrics");
       } finally {
         setMetricsLoading(false);
       }
@@ -454,11 +709,15 @@ const VideoSummary = () => {
     if (!testKey || !sessionId) return;
     try {
       const payload = await fetchJSON<{ npz: string; meta: string }>(
-        `/api/dtw/sessions/${encodeURIComponent(testKey)}/${encodeURIComponent(sessionId)}/download`
+        `/api/dtw/sessions/${encodeURIComponent(testKey)}/${encodeURIComponent(
+          sessionId
+        )}/download`
       );
-      const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+      const blob = new Blob([JSON.stringify(payload, null, 2)], {
+        type: "application/json",
+      });
       const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
+      const a = document.createElement("a");
       a.href = url;
       a.download = `dtw_${testKey}_${sessionId}.json`;
       document.body.appendChild(a);
@@ -483,17 +742,27 @@ const VideoSummary = () => {
               </Button>
             </Link>
             <div>
-              <h1 className="text-3xl font-bold text-foreground">Video Processing Summary</h1>
-              <p className="text-muted-foreground mt-1">DTW analysis and results</p>
+              <h1 className="text-3xl font-bold text-foreground">
+                Video Processing Summary
+              </h1>
+              <p className="text-muted-foreground mt-1">
+                DTW analysis and results
+              </p>
             </div>
           </div>
           <div className="flex space-x-3">
-            <Button variant="outline" disabled={!testKey || !sessionId} onClick={onExport}>
+            <Button
+              variant="outline"
+              disabled={!testKey || !sessionId}
+              onClick={onExport}
+            >
               <Download className="mr-2 h-4 w-4" />
               Export DTW Paths
             </Button>
             <Link to={`/patient/${id}/test-selection`}>
-              <Button className="bg-gradient-primary hover:bg-primary-hover">New Test Session</Button>
+              <Button className="bg-gradient-primary hover:bg-primary-hover">
+                New Test Session
+              </Button>
             </Link>
           </div>
         </div>
@@ -507,44 +776,49 @@ const VideoSummary = () => {
             <CardHeader>
               <CardTitle className="flex items-center justify-between">
                 Recorded Video
-                <Badge variant="secondary" className="bg-success text-success-foreground">Processed</Badge>
+                <Badge
+                  variant="secondary"
+                  className="bg-success text-success-foreground"
+                >
+                  Processed
+                </Badge>
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              {selectedVideo ? (
+              {normalizedVideoName && videoSrc ? (
                 <>
-                  <video controls className="w-full rounded-lg aspect-video">
-                    <source
-                      src={`/api/recordings/${selectedVideo}`}
-                      type={
-                        selectedVideo.endsWith('.webm')
-                          ? 'video/webm'
-                          : selectedVideo.endsWith('.mp4')
-                          ? 'video/mp4'
-                          : 'video/quicktime'
-                      }
-                    />
+                  <video
+                    key={normalizedVideoName} // force reload when selection changes
+                    controls
+                    className="w-full rounded-lg aspect-video"
+                  >
+                    <source src={videoSrc} type="video/mp4" />
                     Your browser does not support the video tag.
                   </video>
                   <div className="text-xs text-muted-foreground mt-2">
-                    Files are stored on the server under <code>backend/recordings</code>.
+                    Playing from: <code>{videoSrc}</code>
                   </div>
                 </>
               ) : (
                 <div className="bg-gray-900 text-white text-center py-10 rounded-lg">
-                  No video available. Recordings are saved under <code>backend/recordings</code> with the patient and test name.
+                  No video available. Recordings are saved under{" "}
+                  <code>backend/routes/recordings</code>.
                 </div>
               )}
               {videoList.length > 1 && (
                 <div className="flex items-center gap-2">
-                  <span className="block text-sm font-medium text-foreground">Select recording</span>
+                  <span className="block text-sm font-medium text-foreground">
+                    Select recording
+                  </span>
                   <select
-                    value={selectedVideo || ''}
+                    value={selectedVideo || ""}
                     onChange={(e) => setSelectedVideo(e.target.value)}
                     className="border p-2 rounded-md text-sm"
                   >
                     {videoList.map((video, idx) => (
-                      <option key={idx} value={video}>{video}</option>
+                      <option key={idx} value={video}>
+                        {video}
+                      </option>
                     ))}
                   </select>
                 </div>
@@ -567,13 +841,22 @@ const VideoSummary = () => {
                   <Calendar className="mr-2 h-5 w-5" />
                   Test History
                 </span>
-                <Select value={selectedHistoryFilter} onValueChange={setSelectedHistoryFilter}>
-                  <SelectTrigger className="w-40"><SelectValue placeholder="Filter" /></SelectTrigger>
+                <Select
+                  value={selectedHistoryFilter}
+                  onValueChange={setSelectedHistoryFilter}
+                >
+                  <SelectTrigger className="w-40">
+                    <SelectValue placeholder="Filter" />
+                  </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">All Tests</SelectItem>
                     <SelectItem value="stand-and-sit">Stand & Sit</SelectItem>
-                    <SelectItem value="finger-tapping">Finger Tapping</SelectItem>
-                    <SelectItem value="fist-open-close">Fist Open & Close</SelectItem>
+                    <SelectItem value="finger-tapping">
+                      Finger Tapping
+                    </SelectItem>
+                    <SelectItem value="fist-open-close">
+                      Fist Open & Close
+                    </SelectItem>
                   </SelectContent>
                 </Select>
               </CardTitle>
@@ -584,13 +867,20 @@ const VideoSummary = () => {
                   <div className="flex justify-between items-center">
                     <div>
                       <p className="font-medium text-sm">{test.name}</p>
-                      <p className="text-xs text-muted-foreground">{test.date.toDateString()}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {test.date.toDateString()}
+                      </p>
                     </div>
-                    <Badge variant="secondary" className="bg-success text-success-foreground">
+                    <Badge
+                      variant="secondary"
+                      className="bg-success text-success-foreground"
+                    >
                       Score: {test.results?.score}
                     </Badge>
                   </div>
-                  <p className="text-xs text-muted-foreground mt-1">{test.results?.analysis}</p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    {test.results?.analysis}
+                  </p>
                 </div>
               ))}
             </CardContent>
@@ -628,7 +918,9 @@ const VideoSummary = () => {
               </Table>
               <div className="mt-4 p-3 bg-muted rounded-lg">
                 <FileText className="inline mr-2 text-primary" />
-                <span className="text-sm">{currentTest?.results?.analysis}</span>
+                <span className="text-sm">
+                  {currentTest?.results?.analysis}
+                </span>
               </div>
             </CardContent>
           </Card>
@@ -645,31 +937,43 @@ const VideoSummary = () => {
                 </CardTitle>
                 <div className="flex flex-wrap items-center gap-3">
                   {/* Test picker */}
-                  <Select value={testKey ?? ''} onValueChange={(v) => setTestKey(v as CanonicalTest)}>
+                  <Select
+                    value={testKey ?? ""}
+                    onValueChange={(v) => setTestKey(v as CanonicalTest)}
+                  >
                     <SelectTrigger className="w-44">
                       <SelectValue placeholder="Select test" />
                     </SelectTrigger>
                     <SelectContent>
                       {canonicalTests.map((t) => (
-                        <SelectItem key={t} value={t}>{t}</SelectItem>
+                        <SelectItem key={t} value={t}>
+                          {t}
+                        </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
                   {/* Session picker */}
-                  <Select value={sessionId ?? ''} onValueChange={(v) => setSessionId(v)}>
+                  <Select
+                    value={sessionId ?? ""}
+                    onValueChange={(v) => setSessionId(v)}
+                  >
                     <SelectTrigger className="w-64">
                       <SelectValue placeholder="Select session" />
                     </SelectTrigger>
                     <SelectContent>
                       {sessions.map((s) => (
                         <SelectItem key={s.session_id} value={s.session_id}>
-                          {s.created_utc} • sim {s.similarity?.toFixed(2) ?? '-'}
+                          {s.created_utc} • sim{" "}
+                          {s.similarity?.toFixed(2) ?? "-"}
                         </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
                   {/* Axis */}
-                  <Select value={axis} onValueChange={(v) => setAxis(v as 'x'|'y')}>
+                  <Select
+                    value={axis}
+                    onValueChange={(v) => setAxis(v as "x" | "y")}
+                  >
                     <SelectTrigger className="w-28">
                       <SelectValue placeholder="Axis" />
                     </SelectTrigger>
@@ -679,7 +983,10 @@ const VideoSummary = () => {
                     </SelectContent>
                   </Select>
                   {/* Downsample */}
-                  <Select value={String(maxPoints)} onValueChange={(v) => setMaxPoints(Number(v))}>
+                  <Select
+                    value={String(maxPoints)}
+                    onValueChange={(v) => setMaxPoints(Number(v))}
+                  >
                     <SelectTrigger className="w-28">
                       <SelectValue placeholder="Points" />
                     </SelectTrigger>
@@ -695,35 +1002,155 @@ const VideoSummary = () => {
 
             <CardContent className="space-y-4">
               {/* KPI Strip */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <div className="p-3 rounded-md bg-muted">
-                  <div className="text-xs text-muted-foreground">Similarity</div>
-                  <div className="mt-1 text-2xl font-semibold">
-                    {metricsLoading ? '…' : (metrics?.similarity ?? sessions.find(s => s.session_id === sessionId)?.similarity ?? 0).toFixed(3)}
-                  </div>
-                </div>
-                <div className="p-3 rounded-md bg-muted">
-                  <div className="text-xs text-muted-foreground">Total DTW Distance</div>
-                  <div className="mt-1 text-2xl font-semibold">
-                    {metricsLoading ? '…' : (metrics?.distance ?? 0).toFixed(3)}
-                  </div>
-                </div>
-                <div className="p-3 rounded-md bg-muted">
-                  <div className="text-xs text-muted-foreground">Avg. Step Cost</div>
-                  <div className="mt-1 text-2xl font-semibold">
-                    {metricsLoading ? '…' : (metrics?.avg_step_cost ?? 0).toFixed(3)}
-                  </div>
-                </div>
-              </div>
-              {metricsErr && <div className="text-sm text-red-600">{metricsErr}</div>}
+             {/* Overall KPIs */}
+<div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+  <div className="p-3 rounded-md bg-muted">
+    <div className="text-xs text-muted-foreground">
+      Overall Similarity (0–1)
+    </div>
+    <div className="mt-1 text-2xl font-semibold">
+      {metricsLoading
+        ? "…"
+        : (
+            metrics?.similarity_overall ??
+            metrics?.similarity ??
+            sessions.find((s) => s.session_id === sessionId)?.similarity ??
+            0
+          ).toFixed(3)}
+    </div>
+  </div>
+  <div className="p-3 rounded-md bg-muted">
+    <div className="text-xs text-muted-foreground">
+      Positional DTW Distance
+    </div>
+    <div className="mt-1 text-2xl font-semibold">
+      {metricsLoading
+        ? "…"
+        : (
+            metrics?.distance_pos ??
+            metrics?.distance ??
+            0
+          ).toFixed(3)}
+    </div>
+  </div>
+  <div className="p-3 rounded-md bg-muted">
+    <div className="text-xs text-muted-foreground">
+      Avg. Step Cost (Position)
+    </div>
+    <div className="mt-1 text-2xl font-semibold">
+      {metricsLoading
+        ? "…"
+        : (
+            metrics?.avg_step_pos ??
+            metrics?.avg_step_cost ??
+            0
+          ).toFixed(3)}
+    </div>
+  </div>
+</div>
+
+{/* Per-channel similarity breakdown */}
+{metrics && (
+  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-3">
+    <div className="p-3 rounded-md bg-muted/70">
+      <div className="text-xs text-muted-foreground">
+        Position Similarity
+      </div>
+      <div className="mt-1 text-lg font-semibold">
+        {(metrics.similarity_pos ?? 0).toFixed(3)}
+      </div>
+    </div>
+    <div className="p-3 rounded-md bg-muted/70">
+      <div className="text-xs text-muted-foreground">
+        Amplitude Similarity
+      </div>
+      <div className="mt-1 text-lg font-semibold">
+        {(metrics.similarity_amp ?? 0).toFixed(3)}
+      </div>
+    </div>
+    <div className="p-3 rounded-md bg-muted/70">
+      <div className="text-xs text-muted-foreground">
+        Speed Similarity
+      </div>
+      <div className="mt-1 text-lg font-semibold">
+        {(metrics.similarity_spd ?? 0).toFixed(3)}
+      </div>
+    </div>
+  </div>
+)}
+
+              {metricsErr && (
+                <div className="text-sm text-red-600">{metricsErr}</div>
+              )}
 
               <Explainer title="How to read this section">
-                Top-left shows the original aggregated motion on the selected axis. Top-right shows the DTW staircase
-                mapping (live → reference). The large bottom chart shows both signals after DTW alignment; the shaded band
-                and vertical connectors visualize point-to-point differences. Similarity is a monotonic transform of the
-                mean per-step cost (higher ≈ better); distance is the total DTW cost along the path.
+                Top-left shows the original aggregated motion on the selected
+                axis. Top-right shows the DTW staircase mapping (live →
+                reference). The large bottom chart shows both signals after DTW
+                alignment; the shaded band and vertical connectors visualize
+                point-to-point differences. Similarity is a monotonic transform
+                of the mean per-step cost (higher ≈ better); distance is the
+                total DTW cost along the path.
               </Explainer>
-
+                  {metrics?.series && (
+  <div className="mt-6 grid grid-cols-1 lg:grid-cols-3 gap-6">
+    {([
+      ["Position DTW (local cost)", metrics.series.position, "Position"],
+      ["Amplitude DTW (local cost)", metrics.series.amplitude, "Amplitude"],
+      ["Speed DTW (local cost)", metrics.series.speed, "Speed"],
+    ] as const).map(([title, curve, label]) => {
+      const data = makeLocalCostData(curve);
+      return (
+        <div key={label} className="h-[260px]">
+          <h3 className="text-sm font-semibold mb-2">{title}</h3>
+          <ResponsiveContainer width="100%" height="100%">
+            <LineChart
+              data={data}
+              margin={{ top: 8, right: 16, left: 0, bottom: 8 }}
+            >
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis
+                dataKey="step"
+                tickCount={5}
+                padding={{ left: 8, right: 8 }}
+              >
+                <Label
+                  value="DTW path step"
+                  offset={-4}
+                  position="insideBottom"
+                />
+              </XAxis>
+              <YAxis tickCount={5} />
+              <Tooltip />
+              <Legend />
+              <Line
+                type="monotone"
+                dataKey="cost"
+                name="Local cost"
+                dot={false}
+                strokeWidth={1.5}
+              />
+              {/* Optional: overlay cumulative progress [0–1] on same axis */}
+              <Line
+                type="monotone"
+                dataKey="cum"
+                name="Cumulative progress"
+                dot={false}
+                strokeDasharray="4 4"
+                strokeWidth={1}
+              />
+            </LineChart>
+          </ResponsiveContainer>
+          <div className="text-xs text-muted-foreground mt-1">
+            {label} DTW: each point is the cost at one step along the
+            shortest path; the dashed line shows how far along the path
+            you are (0 → 1).
+          </div>
+        </div>
+      );
+    })}
+  </div>
+)}
               <DtwAggregatePanels
                 testKey={testKey}
                 sessionId={sessionId}
@@ -741,3 +1168,4 @@ const VideoSummary = () => {
 };
 
 export default VideoSummary;
+
