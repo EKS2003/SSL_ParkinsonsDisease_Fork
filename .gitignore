@@ -29,8 +29,8 @@ dist-ssr
 #python-compiler
 *.pyc
 
-#json files
-*.json
+# #json files
+# *.json removed because it would mess up the package.json
 
 #media files
 *.mp4

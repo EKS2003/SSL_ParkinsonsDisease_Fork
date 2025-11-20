@@ -1,6 +1,6 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { ArrowLeft, Play, FileText, Activity, Video, Upload, ReceiptRussianRuble } from 'lucide-react';
+import { ArrowLeft, Play, FileText, Activity, Video, Upload } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -10,6 +10,13 @@ import { Patient, Test, AVAILABLE_TESTS, TestIndicator } from '@/types/patient';
 import apiService from '@/services/api';
 import { getSeverityColor, calculateAge } from '@/lib/utils';
 import { Input } from '@/components/ui/input';
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 
 const indicatorBadgeClasses: Record<TestIndicator['color'], string> = {
   success: 'bg-success text-success-foreground',
@@ -44,6 +51,10 @@ const TestSelection = () => {
   const [loadingPatient, setLoadingPatient] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [testSearch, setTestSearch] = useState('');
+  const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
   const sortedHistory = useMemo(
     () => [...testHistory].sort((a, b) => b.date.getTime() - a.date.getTime()),
     [testHistory]

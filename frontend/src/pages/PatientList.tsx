@@ -93,7 +93,12 @@ const PatientList = () => {
   const { toast } = useToast();
   const { isConnected, isChecking } = useApiStatus();
 
-  // Quick add form state
+  const [sortField, setSortField] = useState<SortField>('lastName');
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
+  const [csvFile, setCsvFile] = useState<File | null>(null);
+  const [csvUploading, setCsvUploading] = useState(false);
+  const csvFileInputRef = useRef<HTMLInputElement>(null);
+
   const [quickFormData, setQuickFormData] = useState({
     firstName: '',
     lastName: '',
@@ -102,7 +107,6 @@ const PatientList = () => {
     severity: '' as Patient['severity'],
   });
 
-  // Fetch patients on component mount
   useEffect(() => {
     fetchPatients();
   }, []);
@@ -617,7 +621,7 @@ const PatientList = () => {
                 </DialogTrigger>
                 <DialogContent className="w-full sm:max-w-4xl max-w-4xl">
                   <DialogHeader>
-                    <DialogTitle>Upload Patients CSV</DialogTitle>
+                    <DialogTitle>Upload Patients CSV</DialogTitle> {/*Need to implement upload csv function*/}
                   </DialogHeader>
                   <form onSubmit={handleQuickSubmit} className="space-y-4">
                     <div className="grid grid-cols-2 gap-4">
@@ -673,9 +677,11 @@ const PatientList = () => {
                           <SelectValue placeholder="Select severity level" />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="Mild">Mild</SelectItem>
-                          <SelectItem value="Moderate">Moderate</SelectItem>
-                          <SelectItem value="Severe">Severe</SelectItem>
+                          <SelectItem value="Stage 1">Stage 1</SelectItem>
+                          <SelectItem value="Stage 2">Stage 2</SelectItem>
+                          <SelectItem value="Stage 3">Stage 3</SelectItem>
+                          <SelectItem value="Stage 4">Stage 4</SelectItem>
+                          <SelectItem value="Stage 5">Stage 5</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>
@@ -685,7 +691,7 @@ const PatientList = () => {
                         Close
                       </Button>
                     </div>
-                  </div>
+                  </form>
                 </DialogContent>
               </Dialog>
 
@@ -711,7 +717,7 @@ const PatientList = () => {
               placeholder="Search patients by name or record number..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-10"
+              className="pl-10 w-full md:w-[380px]"
             />
           </div>
           <div className="flex w-full flex-col gap-3 sm:w-auto sm:flex-row sm:items-center">
