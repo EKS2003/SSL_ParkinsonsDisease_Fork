@@ -161,8 +161,7 @@ def _patient_to_api_dict(session: Session, p: Patient) -> PatientResponse:
 
     return PatientResponse(
         patient_id=p.patient_id,
-        first_name=p.first_name or "",
-        last_name=p.last_name,
+        name=p.name or "",
         birthDate=p.dob,  # or adjust type to date if you prefer
         height=str(p.height or 0),
         weight=str(p.weight or 0),
@@ -175,8 +174,8 @@ def _patient_to_api_dict(session: Session, p: Patient) -> PatientResponse:
 
 
 def create_patient(
-    first_name: str,
-    last_name: str,
+    name: str,
+    age: int,
     birthDate: Union[str, date],
     height: Optional[float],
     weight: Optional[float],
@@ -202,7 +201,6 @@ def create_patient(
     w = _parse_number(weight, 0, 500)
 
     # coerce lab_results to a plain string value
-    name = first_name + " " + last_name
     patient_id = _gen_patient_id(name)
 
     try:
@@ -212,8 +210,7 @@ def create_patient(
             dbp = Patient(
                 patient_id=patient_id,
                 user_id=123,
-                first_name=first_name,
-                last_name=last_name,
+                name=name,
                 dob=dob,
                 height=int(h) if h is not None else None,
                 weight=int(w) if w is not None else None,

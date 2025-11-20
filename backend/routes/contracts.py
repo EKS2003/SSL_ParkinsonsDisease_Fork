@@ -37,8 +37,7 @@ class DoctorNoteOut(BaseModel):
     added_by: Optional[str] = None
 
 class PatientCreate(BaseModel):
-    first_name: str
-    last_name: str
+    name: str
     age: int
     birthDate: date
     height: Optional[Union[float, str]] = None
@@ -60,8 +59,7 @@ class PatientCreate(BaseModel):
     
 
 class PatientUpdate(BaseModel):
-    first_name: Optional[str] = None
-    last_name: Optional[str] = None
+    name: Optional[str] = None
     birthDate: Optional[date] = None
     height: Optional[Union[float, str]] = None
     weight: Optional[Union[float, str]] = None
@@ -83,8 +81,7 @@ class PatientUpdate(BaseModel):
 
 class PatientResponse(BaseModel):
     patient_id: str
-    first_name: str
-    last_name: str
+    name: str
     birthDate: datetime
     height: str
     weight: str

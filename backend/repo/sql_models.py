@@ -1,7 +1,7 @@
 from datetime import date, datetime
 from typing import List, Dict, Optional
 
-from sqlalchemy import String, Integer, DateTime, Text, ForeignKey, create_engine, event, func, Index
+from sqlalchemy import String, Integer, DateTime, Text, ForeignKey, create_engine, event, func, Index, Date
 
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship, sessionmaker
 from sqlalchemy.types import JSON
@@ -12,8 +12,7 @@ class User(Base):
     __tablename__ = "users"
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     username: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
-    first_name: Mapped[Optional[str]] = mapped_column(String(255))
-    last_name: Mapped[Optional[str]] = mapped_column(String(255))
+    full_name: Mapped[str] = mapped_column(String(255), nullable=False)
     email: Mapped[Optional[str]] = mapped_column(String(320), unique=True)
     hashed_password: Mapped[str] = mapped_column(String(255), nullable=False)
     location: Mapped[str] = mapped_column(String(255), nullable = False)
@@ -37,9 +36,8 @@ class Patient(Base):
         ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
     )
 
-    first_name: Mapped[Optional[str]] = mapped_column(String(255))
-    last_name: Mapped[Optional[str]] = mapped_column(String(255))
-    dob: Mapped[Optional[datetime]] = mapped_column(DateTime)
+    name: Mapped[Optional[str]] = mapped_column(String(255))
+    dob: Mapped[Optional[date]] = mapped_column(Date)
     height: Mapped[Optional[int]] = mapped_column(Integer)
     weight: Mapped[Optional[int]] = mapped_column(Integer)
     severity: Mapped[Optional[str]] = mapped_column(String(50))
@@ -102,7 +100,15 @@ if __name__ == "__main__":
 
     # example
     with Session() as s:
-        u = User(username="doc_amy", full_name="Dr. Amy", email="amy@example.com", hashed_password="***")
+        u = User(
+            username="doc_amy",
+            full_name="Dr. Amy",
+            email="amy@example.com",
+            hashed_password="***",
+            location="UF Health",
+            title="Neurologist",
+            speciality="Movement Disorders",
+        )
         p = Patient(patient_id="P001", name="John Smith", user=u)  # assign owner
         s.add_all([u, p])
         s.commit()

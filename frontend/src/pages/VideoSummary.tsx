@@ -72,11 +72,38 @@ type AxisAggResponse = {
   warped: { k: number[]; live: number[]; ref: number[] };
 };
 
+type DtwSeriesCurve = {
+  local_cost_path: { x: number[]; y: number[] };
+  cumulative_progress: { x: number[]; y: number[] };
+  alignment_map: { x: number[]; y: number[] };
+};
+
 type DtwSeriesMetrics = {
   ok: boolean;
-  distance: number;
-  avg_step_cost: number;
-  similarity: number;
+
+  // New distance / similarity fields from backend
+  distance_pos?: number;
+  distance_amp?: number;
+  distance_spd?: number;
+
+  avg_step_pos?: number;
+
+  similarity_overall?: number;
+  similarity_pos?: number;
+  similarity_amp?: number;
+  similarity_spd?: number;
+
+  // Backwards-compat (if backend still returns these)
+  distance?: number;
+  avg_step_cost?: number;
+  similarity?: number;
+
+  // Series for plotting DTW curves
+  series?: {
+    position: DtwSeriesCurve;
+    amplitude: DtwSeriesCurve;
+    speed: DtwSeriesCurve;
+  };
 };
 
 /* ===================== Mock (unchanged) ===================== */
@@ -185,6 +212,34 @@ function makeAligned(k: number[], lv: number[], rv: number[]) {
     gap: Math.abs(lv[i] - rv[i]),
   }));
 }
+
+type LocalCostSeriesData = { step: number; cost: number; cum?: number };
+
+function makeLocalCostData(
+  curve?: DtwSeriesCurve
+): LocalCostSeriesData[] {
+  if (!curve?.local_cost_path?.x || !curve.local_cost_path.y) return [];
+  const xs = curve.local_cost_path.x;
+  const ys = curve.local_cost_path.y;
+  const n = Math.min(xs.length, ys.length);
+  const base: LocalCostSeriesData[] = [];
+
+  // Optional cumulative (already normalized 0–1 by backend)
+  const cumX = curve.cumulative_progress?.x ?? [];
+  const cumY = curve.cumulative_progress?.y ?? [];
+
+  for (let i = 0; i < n; i++) {
+    const step = xs[i];
+    const cost = ys[i];
+    let cum: number | undefined = undefined;
+    if (i < cumX.length && i < cumY.length) {
+      cum = cumY[i];
+    }
+    base.push({ step, cost, cum });
+  }
+  return base;
+}
+
 
 /* === Custom overlay to draw vertical connectors (|live-ref|) === */
 type GapSegmentsProps = {
@@ -632,13 +687,14 @@ const VideoSummary = () => {
       try {
         setMetricsLoading(true);
         setMetricsErr(null);
-        const data = await fetchJSON<DtwSeriesMetrics>(
+        const data = await fetchJSON<any>(
           `/api/dtw/sessions/${encodeURIComponent(
             testKey
           )}/${encodeURIComponent(sessionId)}/series?max_points=200`,
           ctrl.signal
         );
-        setMetrics(data);
+        setMetrics(data as DtwSeriesMetrics);
+
       } catch (e: any) {
         setMetrics(null);
         setMetricsErr(e?.message || "Failed to load DTW metrics");
@@ -946,41 +1002,83 @@ const VideoSummary = () => {
 
             <CardContent className="space-y-4">
               {/* KPI Strip */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <div className="p-3 rounded-md bg-muted">
-                  <div className="text-xs text-muted-foreground">
-                    Similarity
-                  </div>
-                  <div className="mt-1 text-2xl font-semibold">
-                    {metricsLoading
-                      ? "…"
-                      : (
-                          metrics?.similarity ??
-                          sessions.find((s) => s.session_id === sessionId)
-                            ?.similarity ??
-                          0
-                        ).toFixed(3)}
-                  </div>
-                </div>
-                <div className="p-3 rounded-md bg-muted">
-                  <div className="text-xs text-muted-foreground">
-                    Total DTW Distance
-                  </div>
-                  <div className="mt-1 text-2xl font-semibold">
-                    {metricsLoading ? "…" : (metrics?.distance ?? 0).toFixed(3)}
-                  </div>
-                </div>
-                <div className="p-3 rounded-md bg-muted">
-                  <div className="text-xs text-muted-foreground">
-                    Avg. Step Cost
-                  </div>
-                  <div className="mt-1 text-2xl font-semibold">
-                    {metricsLoading
-                      ? "…"
-                      : (metrics?.avg_step_cost ?? 0).toFixed(3)}
-                  </div>
-                </div>
-              </div>
+             {/* Overall KPIs */}
+<div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+  <div className="p-3 rounded-md bg-muted">
+    <div className="text-xs text-muted-foreground">
+      Overall Similarity (0–1)
+    </div>
+    <div className="mt-1 text-2xl font-semibold">
+      {metricsLoading
+        ? "…"
+        : (
+            metrics?.similarity_overall ??
+            metrics?.similarity ??
+            sessions.find((s) => s.session_id === sessionId)?.similarity ??
+            0
+          ).toFixed(3)}
+    </div>
+  </div>
+  <div className="p-3 rounded-md bg-muted">
+    <div className="text-xs text-muted-foreground">
+      Positional DTW Distance
+    </div>
+    <div className="mt-1 text-2xl font-semibold">
+      {metricsLoading
+        ? "…"
+        : (
+            metrics?.distance_pos ??
+            metrics?.distance ??
+            0
+          ).toFixed(3)}
+    </div>
+  </div>
+  <div className="p-3 rounded-md bg-muted">
+    <div className="text-xs text-muted-foreground">
+      Avg. Step Cost (Position)
+    </div>
+    <div className="mt-1 text-2xl font-semibold">
+      {metricsLoading
+        ? "…"
+        : (
+            metrics?.avg_step_pos ??
+            metrics?.avg_step_cost ??
+            0
+          ).toFixed(3)}
+    </div>
+  </div>
+</div>
+
+{/* Per-channel similarity breakdown */}
+{metrics && (
+  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-3">
+    <div className="p-3 rounded-md bg-muted/70">
+      <div className="text-xs text-muted-foreground">
+        Position Similarity
+      </div>
+      <div className="mt-1 text-lg font-semibold">
+        {(metrics.similarity_pos ?? 0).toFixed(3)}
+      </div>
+    </div>
+    <div className="p-3 rounded-md bg-muted/70">
+      <div className="text-xs text-muted-foreground">
+        Amplitude Similarity
+      </div>
+      <div className="mt-1 text-lg font-semibold">
+        {(metrics.similarity_amp ?? 0).toFixed(3)}
+      </div>
+    </div>
+    <div className="p-3 rounded-md bg-muted/70">
+      <div className="text-xs text-muted-foreground">
+        Speed Similarity
+      </div>
+      <div className="mt-1 text-lg font-semibold">
+        {(metrics.similarity_spd ?? 0).toFixed(3)}
+      </div>
+    </div>
+  </div>
+)}
+
               {metricsErr && (
                 <div className="text-sm text-red-600">{metricsErr}</div>
               )}
@@ -994,7 +1092,65 @@ const VideoSummary = () => {
                 of the mean per-step cost (higher ≈ better); distance is the
                 total DTW cost along the path.
               </Explainer>
-
+                  {metrics?.series && (
+  <div className="mt-6 grid grid-cols-1 lg:grid-cols-3 gap-6">
+    {([
+      ["Position DTW (local cost)", metrics.series.position, "Position"],
+      ["Amplitude DTW (local cost)", metrics.series.amplitude, "Amplitude"],
+      ["Speed DTW (local cost)", metrics.series.speed, "Speed"],
+    ] as const).map(([title, curve, label]) => {
+      const data = makeLocalCostData(curve);
+      return (
+        <div key={label} className="h-[260px]">
+          <h3 className="text-sm font-semibold mb-2">{title}</h3>
+          <ResponsiveContainer width="100%" height="100%">
+            <LineChart
+              data={data}
+              margin={{ top: 8, right: 16, left: 0, bottom: 8 }}
+            >
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis
+                dataKey="step"
+                tickCount={5}
+                padding={{ left: 8, right: 8 }}
+              >
+                <Label
+                  value="DTW path step"
+                  offset={-4}
+                  position="insideBottom"
+                />
+              </XAxis>
+              <YAxis tickCount={5} />
+              <Tooltip />
+              <Legend />
+              <Line
+                type="monotone"
+                dataKey="cost"
+                name="Local cost"
+                dot={false}
+                strokeWidth={1.5}
+              />
+              {/* Optional: overlay cumulative progress [0–1] on same axis */}
+              <Line
+                type="monotone"
+                dataKey="cum"
+                name="Cumulative progress"
+                dot={false}
+                strokeDasharray="4 4"
+                strokeWidth={1}
+              />
+            </LineChart>
+          </ResponsiveContainer>
+          <div className="text-xs text-muted-foreground mt-1">
+            {label} DTW: each point is the cost at one step along the
+            shortest path; the dashed line shows how far along the path
+            you are (0 → 1).
+          </div>
+        </div>
+      );
+    })}
+  </div>
+)}
               <DtwAggregatePanels
                 testKey={testKey}
                 sessionId={sessionId}
