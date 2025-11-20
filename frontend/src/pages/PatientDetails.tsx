@@ -23,7 +23,7 @@ import {
   TestIndicator,
 } from "@/types/patient";
 import { getSeverityColor, calculateAge } from "@/lib/utils";
-import apiService, { mapSeverity } from "@/services/api";
+import apiService, { mapSeverity } from "@/services/api/api";
 import {
   Dialog,
   DialogContent,

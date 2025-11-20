@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import apiService from '@/services/api';
+import apiService from '@/services/api/api';
 
 export const useApiStatus = () => {
   const [isConnected, setIsConnected] = useState<boolean | null>(null);

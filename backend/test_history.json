@@ -446,5 +446,13 @@
       "recording_file": "ws_recording_2025-11-19_23-29-32_de5038ba-b43d-4008-851d-3124294e7579.mp4",
       "frame_count": 166
     }
+  ],
+  "dusti1763655477": [
+    {
+      "test_name": "finger-tapping",
+      "date": "2025-11-20T17:32:23.253807",
+      "recording_file": "ws_recording_2025-11-20_12-32-22_3ff9340c-ef52-4330-85ec-ef0bb026c439.mp4",
+      "frame_count": 166
+    }
   ]
 }

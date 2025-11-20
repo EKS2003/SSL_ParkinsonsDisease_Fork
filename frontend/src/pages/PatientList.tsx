@@ -11,7 +11,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
 import { Patient, DoctorNoteEntry } from '@/types/patient';
-import apiService, { normalizeBirthDate } from '@/services/api';
+import apiService, { normalizeBirthDate } from '@/services/api/api';
 import { useApiStatus } from '@/hooks/use-api-status';
 import { getSeverityColor, calculateAge } from '@/lib/utils';
 

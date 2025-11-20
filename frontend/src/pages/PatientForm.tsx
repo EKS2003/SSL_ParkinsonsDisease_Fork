@@ -9,7 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
 import { Patient } from '@/types/patient';
-import apiService, { normalizeBirthDate } from '@/services/api';
+import apiService, { normalizeBirthDate } from '@/services/api/api';
 
 const PatientForm = () => {
   const navigate = useNavigate();

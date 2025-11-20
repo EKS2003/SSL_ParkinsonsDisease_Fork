@@ -7,7 +7,7 @@ import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { useToast } from '@/hooks/use-toast';
 import { Patient, Test, AVAILABLE_TESTS, TestIndicator } from '@/types/patient';
-import apiService from '@/services/api';
+import apiService from '@/services/api/api';
 import { getSeverityColor, calculateAge } from '@/lib/utils';
 import { Input } from '@/components/ui/input';
 

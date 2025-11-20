@@ -42,69 +42,27 @@ import {
   Customized,
 } from "recharts";
 import { Test } from "@/types/patient";
+import { API_BASE } from "@/services/base";
+import {
+  canonicalTests,
+  CanonicalTest,
+  DtwSessionMeta,
+  AxisAggResponse,
+  DtwSeriesMetrics,
+  normalizeTestKey,
+  DtwSeriesCurve
+} from "@/types/dtw";
 
-/* ========= Backend base URL for video + APIs =========
-   If you have a Vite proxy that maps `/api` -> http://localhost:8000,
-   keep API_BASE = "/api". If not, change it to "http://localhost:8000".
-*/
-const API_BASE =
-  (import.meta.env.VITE_API_BASE_URL as string | undefined) ?? "/api";
+import {
+  resolveDtwRoute,
+  listDtwSessions,
+  getDtwSeriesMetrics,
+  getAxisAggregate,
+  listTestVideos,
+  downloadDtwPayload,
+} from '@/services/api/dtw'
 
-/* ========================= Types ========================= */
-type DtwSessionMeta = {
-  session_id: string;
-  created_utc: string;
-  model?: "hands" | "pose";
-  live_len?: number;
-  ref_len?: number;
-  distance?: number;
-  similarity?: number;
-};
 
-type AxisAggResponse = {
-  ok: boolean;
-  axis: "x" | "y" | "z";
-  reduce: "mean" | "median" | "pca1";
-  landmarks: "all" | number[];
-  live: { x: number[]; y: number[] };
-  ref: { x: number[]; y: number[] };
-  path: { i: number[]; j: number[] };
-  warped: { k: number[]; live: number[]; ref: number[] };
-};
-
-type DtwSeriesCurve = {
-  local_cost_path: { x: number[]; y: number[] };
-  cumulative_progress: { x: number[]; y: number[] };
-  alignment_map: { x: number[]; y: number[] };
-};
-
-type DtwSeriesMetrics = {
-  ok: boolean;
-
-  // New distance / similarity fields from backend
-  distance_pos?: number;
-  distance_amp?: number;
-  distance_spd?: number;
-
-  avg_step_pos?: number;
-
-  similarity_overall?: number;
-  similarity_pos?: number;
-  similarity_amp?: number;
-  similarity_spd?: number;
-
-  // Backwards-compat (if backend still returns these)
-  distance?: number;
-  avg_step_cost?: number;
-  similarity?: number;
-
-  // Series for plotting DTW curves
-  series?: {
-    position: DtwSeriesCurve;
-    amplitude: DtwSeriesCurve;
-    speed: DtwSeriesCurve;
-  };
-};
 
 /* ===================== Mock (unchanged) ===================== */
 const mockTestHistory: Test[] = [
@@ -150,30 +108,7 @@ const mockStats = {
 };
 
 /* ======================= Helpers ======================= */
-const canonicalTests = [
-  "stand-and-sit",
-  "finger-tapping",
-  "fist-open-close",
-] as const;
-type CanonicalTest = (typeof canonicalTests)[number];
 
-const isCanonical = (t?: string | null): t is CanonicalTest =>
-  !!t && (canonicalTests as readonly string[]).includes(t);
-
-const normalizeTestKey = (t?: string | null): CanonicalTest | null => {
-  const s = (t ?? "").trim().toLowerCase();
-  if (s === "finger-taping") return "finger-tapping"; // typo guard
-  return isCanonical(s) ? (s as CanonicalTest) : null;
-};
-
-async function fetchJSON<T>(url: string, signal?: AbortSignal): Promise<T> {
-  const res = await fetch(url, { signal });
-  if (!res.ok) {
-    const text = await res.text().catch(() => "");
-    throw new Error(text || `HTTP ${res.status}`);
-  }
-  return res.json();
-}
 
 const Explainer = ({
   title,
@@ -312,7 +247,7 @@ function DtwAggregatePanels({
   landmarks = "all", // 'all' or '0,1,2'
   maxPoints = 600, // bigger by default (less downsampling when full width)
 }: {
-  testKey: string | null;
+  testKey: "stand-and-sit" | "finger-tapping" | "fist-open-close";
   sessionId: string | null;
   axis?: "x" | "y" | "z";
   reduce?: "mean" | "median" | "pca1";
@@ -329,35 +264,45 @@ function DtwAggregatePanels({
       setErr(null);
       return;
     }
+
+    const ctrl = new AbortController();
     let aborted = false;
+
     (async () => {
       setLoading(true);
       setErr(null);
       try {
-        const res = await fetch(
-          `/api/dtw/sessions/${encodeURIComponent(
-            testKey
-          )}/${encodeURIComponent(sessionId)}/axis_agg` +
-            `?axis=${axis}&reduce=${reduce}&landmarks=${encodeURIComponent(
-              landmarks
-            )}&max_points=${maxPoints}`
+        const json = await getAxisAggregate(
+          {
+            testKey,
+            sessionId,
+            axis,
+            reduce,
+            landmarks,
+            maxPoints,
+          },
+          ctrl.signal
         );
-        const json = await res.json();
         if (!aborted) {
-          if (json?.ok) setData(json as AxisAggResponse);
+          if (json?.ok) setData(json);
           else {
             setData(null);
-            setErr(json?.detail || "Failed to load aggregated series");
+            setErr("Failed to load aggregated series");
           }
         }
       } catch (e: any) {
-        if (!aborted) setErr(e?.message || "Failed to load aggregated series");
+        if (!aborted) {
+          setErr(e?.message || "Failed to load aggregated series");
+          setData(null);
+        }
       } finally {
         if (!aborted) setLoading(false);
       }
     })();
+
     return () => {
       aborted = true;
+      ctrl.abort();
     };
   }, [testKey, sessionId, axis, reduce, landmarks, maxPoints]);
 
@@ -602,42 +547,49 @@ const VideoSummary = () => {
     }
 
     const ctrl = new AbortController();
+    let cancelled = false;
+
     (async () => {
       try {
-        const data = await fetchJSON<{ testName: string; sessionId: string }>(
-          `/api/dtw/sessions/lookup/${encodeURIComponent(testId)}`,
-          ctrl.signal
-        );
+        const data = await resolveDtwRoute(testId, ctrl.signal);
         const key = normalizeTestKey(data.testName);
-        if (!key)
+        if (!key) {
           throw new Error(
             `Unknown DTW test '${data.testName}' for session '${data.sessionId}'`
           );
-        setTestKey(key);
-        setSessionId(data.sessionId);
+        }
+        if (!cancelled) {
+          setTestKey(key);
+          setSessionId(data.sessionId);
+        }
       } catch (e: any) {
-        setErrMsg(e?.message || "Failed to resolve session from URL");
-        setTestKey(null);
-        setSessionId(null);
+        if (!cancelled) {
+          setErrMsg(e?.message || "Failed to resolve session from URL");
+          setTestKey(null);
+          setSessionId(null);
+        }
       } finally {
-        setRouteResolved(true);
+        if (!cancelled) setRouteResolved(true);
       }
     })();
 
-    return () => ctrl.abort();
+    return () => {
+      cancelled = true;
+      ctrl.abort();
+    };
   }, [testId]);
 
   // Videos list
-  useEffect(() => {
-    if (!routeResolved || !id || !testKey) return;
-    const ctrl = new AbortController();
-    (async () => {
-      try {
-        const data = await fetchJSON<{ success: boolean; videos: string[] }>(
-          `/videos/${encodeURIComponent(id)}/${encodeURIComponent(testKey)}`,
-          ctrl.signal
-        );
-        console.log("Videos API response:", data);
+useEffect(() => {
+  if (!routeResolved || !id || !testKey) return;
+  const ctrl = new AbortController();
+  let cancelled = false;
+
+  (async () => {
+    try {
+      const data = await listTestVideos(id, testKey, ctrl.signal);
+      console.log("Videos API response:", data);
+      if (!cancelled) {
         if (data.success && data.videos?.length > 0) {
           setVideoList(data.videos);
           setSelectedVideo(data.videos[0]);
@@ -645,89 +597,115 @@ const VideoSummary = () => {
           setVideoList([]);
           setSelectedVideo(null);
         }
-      } catch (e) {
-        console.error("Error fetching videos:", e);
+      }
+    } catch (e) {
+      console.error("Error fetching videos:", e);
+      if (!cancelled) {
         setVideoList([]);
         setSelectedVideo(null);
       }
-    })();
-    return () => ctrl.abort();
-  }, [routeResolved, id, testKey]);
+    }
+  })();
+
+  return () => {
+    cancelled = true;
+    ctrl.abort();
+  };
+}, [routeResolved, id, testKey]);
+
 
   // List DTW sessions
-  useEffect(() => {
-    if (!routeResolved || !testKey) return;
-    const ctrl = new AbortController();
-    (async () => {
-      try {
-        const data = await fetchJSON<DtwSessionMeta[]>(
-          `/api/dtw/sessions/${encodeURIComponent(testKey)}`,
-          ctrl.signal
-        );
-        setSessions(data);
-        setSessionId((prev) => prev ?? data[0]?.session_id ?? null);
-      } catch (e: any) {
-        setSessions([]);
-        setSessionId(null);
-        setErrMsg(e?.message || "No DTW sessions found for this test.");
-      }
-    })();
-    return () => ctrl.abort();
-  }, [routeResolved, testKey]);
+    useEffect(() => {
+      if (!routeResolved || !testKey) return;
+      const ctrl = new AbortController();
+      let cancelled = false;
+
+      (async () => {
+        try {
+          const data = await listDtwSessions(testKey, ctrl.signal);
+          if (!cancelled) {
+            setSessions(data);
+            setSessionId((prev) => prev ?? data[0]?.session_id ?? null);
+          }
+        } catch (e: any) {
+          if (!cancelled) {
+            setSessions([]);
+            setSessionId(null);
+            setErrMsg(
+              e?.message || "No DTW sessions found for this test."
+            );
+          }
+        }
+      })();
+
+      return () => {
+        cancelled = true;
+        ctrl.abort();
+      };
+    }, [routeResolved, testKey]);
+
 
   // Fetch KPI metrics (distance, avg step cost, similarity) from /series
-  useEffect(() => {
-    if (!testKey || !sessionId) {
-      setMetrics(null);
-      setMetricsErr(null);
-      return;
-    }
-    const ctrl = new AbortController();
-    (async () => {
-      try {
-        setMetricsLoading(true);
-        setMetricsErr(null);
-        const data = await fetchJSON<any>(
-          `/api/dtw/sessions/${encodeURIComponent(
-            testKey
-          )}/${encodeURIComponent(sessionId)}/series?max_points=200`,
-          ctrl.signal
-        );
-        setMetrics(data as DtwSeriesMetrics);
+useEffect(() => {
+  if (!testKey || !sessionId) {
+    setMetrics(null);
+    setMetricsErr(null);
+    return;
+  }
 
-      } catch (e: any) {
+  const ctrl = new AbortController();
+  let cancelled = false;
+
+  (async () => {
+    try {
+      setMetricsLoading(true);
+      setMetricsErr(null);
+      const data = await getDtwSeriesMetrics(
+        testKey,
+        sessionId,
+        200,
+        ctrl.signal
+      );
+      if (!cancelled) {
+        setMetrics(data);
+      }
+    } catch (e: any) {
+      if (!cancelled) {
         setMetrics(null);
         setMetricsErr(e?.message || "Failed to load DTW metrics");
-      } finally {
-        setMetricsLoading(false);
       }
-    })();
-    return () => ctrl.abort();
-  }, [testKey, sessionId]);
+    } finally {
+      if (!cancelled) setMetricsLoading(false);
+    }
+  })();
+
+  return () => {
+    cancelled = true;
+    ctrl.abort();
+  };
+}, [testKey, sessionId]);
+
 
   const onExport = async () => {
-    if (!testKey || !sessionId) return;
-    try {
-      const payload = await fetchJSON<{ npz: string; meta: string }>(
-        `/api/dtw/sessions/${encodeURIComponent(testKey)}/${encodeURIComponent(
-          sessionId
-        )}/download`
-      );
-      const blob = new Blob([JSON.stringify(payload, null, 2)], {
-        type: "application/json",
-      });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `dtw_${testKey}_${sessionId}.json`;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      URL.revokeObjectURL(url);
-    } catch (e) {
-      console.error(e);
-    }
-  };
+  if (!testKey || !sessionId) return;
+  try {
+    const payload = await downloadDtwPayload(testKey, sessionId);
+    const blob = new Blob([JSON.stringify(payload, null, 2)], {
+      type: "application/json",
+    });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `dtw_${testKey}_${sessionId}.json`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  } catch (e) {
+    console.error(e);
+  }
+};
+
 
   return (
     <div className="min-h-screen bg-background">
