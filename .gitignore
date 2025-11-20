@@ -78,3 +78,4 @@ frontend/src/pages/VideoRecording copy.tsx
 /backend/dtw_runs/fist-open-close
 meta.json
 test_history.json
+backend/test_history.json

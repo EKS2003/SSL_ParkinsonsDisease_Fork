@@ -90,13 +90,14 @@ const TestSelection = () => {
             name: t.test_name ?? 'Unknown test',
             // backend stores the concrete name (e.g. "stand-and-sit")
             // so we can reuse it as the union; fallback to 'stand-and-sit'
-            type: (t.test_name as 'stand-and-sit' | 'palm-open') ?? 'stand-and-sit',
+            type: (t.test_name as 'stand-and-sit' | 'fist-open-close') ?? 'stand-and-sit',
             date: t.test_date ? new Date(t.test_date) : new Date(),
             status: t.recording_file ? 'completed' : 'pending',
             videoUrl: t.recording_file,
             results: t.keypoints ? { raw: t.keypoints } as any : undefined,
           }));
           setTestHistory(normalized);
+          console.log(testHistory )
         }
       } catch (err: any) {
         setError(err.message || 'Failed to connect to server');

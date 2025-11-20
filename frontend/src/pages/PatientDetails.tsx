@@ -50,6 +50,27 @@ const indicatorBadgeClasses: Record<TestIndicator["color"], string> = {
   muted: "bg-muted text-muted-foreground",
 };
 
+function toLocalISO() {
+  const d = new Date();
+  const offset = -d.getTimezoneOffset();
+  const sign = offset >= 0 ? "+" : "-";
+  const pad = (n) => String(n).padStart(2, "0");
+
+  const hours = pad(Math.floor(Math.abs(offset) / 60));
+  const minutes = pad(Math.abs(offset) % 60);
+
+  return (
+    d.getFullYear() +
+    "-" + pad(d.getMonth() + 1) +
+    "-" + pad(d.getDate()) +
+    "T" + pad(d.getHours()) +
+    ":" + pad(d.getMinutes()) +
+    ":" + pad(d.getSeconds()) +
+    "." + String(d.getMilliseconds()).padStart(3, "0") +
+    sign + hours + ":" + minutes
+  );
+}
+
 const testTypeStyles: Record<
   Test["type"],
   { container: string; badge: string }
@@ -170,7 +191,7 @@ const PatientDetails = () => {
         body: JSON.stringify({
           lab_results: {
             id: `lab_${Date.now()}`, // optional, or omit and let backend/DB assign
-            date: new Date().toISOString(),
+            date:  toLocalISO(),
             added_by: "Unknown",
             results: newLabResult.trim(), // <-- plain string, not { value: ... }
           },
@@ -224,7 +245,7 @@ const PatientDetails = () => {
           doctors_notes: 
             {
               id: newEntry.id,
-              date: toISO(newEntry.date),
+              date: toLocalISO(),
               note: newEntry.note,
               added_by: newEntry.addedBy ?? null,
             }, 
@@ -298,13 +319,14 @@ const PatientDetails = () => {
           data.latest_doctor_note ||
           data.patient.doctors_notes_history?.[0] ||
           null;
+        const dateOnly = data.birthDate.split("T")[0];
 
         setPatient({
           id: data.patient_id,
           firstName: firstName,
           lastName: lastName,
           recordNumber: data.patient_id, // Use patient_id as record number
-          birthDate: data.birthDate,
+          birthDate: dateOnly,
           height: `${data.height}`,
           weight: `${data.weight}`,
           labResults: latestLabResult?.results || "",
