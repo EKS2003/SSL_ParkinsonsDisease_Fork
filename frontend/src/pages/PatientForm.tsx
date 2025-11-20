@@ -10,6 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { useToast } from '@/hooks/use-toast';
 import { Patient } from '@/types/patient';
 import apiService, { normalizeBirthDate } from '@/services/api';
+import { calculateAge } from '@/lib/utils';
 
 const PatientForm = () => {
   const navigate = useNavigate();
