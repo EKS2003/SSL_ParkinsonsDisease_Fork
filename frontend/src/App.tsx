@@ -12,6 +12,8 @@ import VideoSummary from "./pages/VideoSummary";
 import NotFound from "./pages/NotFound";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
+import Profile from "./pages/Profile";
+import Welcome from "./pages/Welcome";
 
 const queryClient = new QueryClient();
 
@@ -31,6 +33,8 @@ const App = () => (
           <Route path="/patient/:id/video-summary/:testId" element={<VideoSummary />} />
           <Route path="/login" element={<Login />}/>
           <Route path="/register" element={<Register />}/>
+          <Route path="/profile" element={<Profile />}/>
+          <Route path="/welcome" element={<Welcome />}/>
           <Route path="*" element={<NotFound />} />
         </Routes>
       </BrowserRouter>

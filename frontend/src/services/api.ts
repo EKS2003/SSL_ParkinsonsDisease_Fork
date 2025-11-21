@@ -664,13 +664,13 @@ class ApiService {
       backendData.severity = mappedSeverity;
     }
 
-            console.log('Backend update data:', backendData);
-        console.log('Data types:', {
-          name: typeof backendData.name,
-          birthDate: typeof backendData.birthDate,
-          height: typeof backendData.height,
-          weight: typeof backendData.weight,
-          severity: typeof backendData.severity
+          console.log('Backend update data:', backendData);
+          console.log('Data types:', {
+            name: typeof backendData.name,
+            birthDate: typeof backendData.birthDate,
+            height: typeof backendData.height,
+            weight: typeof backendData.weight,
+            severity: typeof backendData.severity
         });
 
 
