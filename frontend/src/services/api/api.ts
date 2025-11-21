@@ -14,10 +14,43 @@ import type {
 class ApiService {
   private baseUrl: string;
 
+  private tokenKey = "auth_token"
+  private accessToken: string | null;
+
   constructor(baseUrl: string = API_BASE_URL) {
     this.baseUrl = baseUrl;
+
+    //Basically checks if window is fine. Tries to also check if there is a token
+    if (typeof window !== "undefined"){
+      this.accessToken = window.localStorage.getItem(this.tokenKey);
+    } else {
+      this.accessToken = null;
+      }
   }
 
+  private setToken(token: string | null){
+    this.accessToken = token
+    if(typeof window !== "undefined"){
+      if(token){
+        window.localStorage.setItem(this.tokenKey, token);
+      } else{
+          window.localStorage.removeItem(this.tokenKey);
+      }
+    }
+  }
+
+  public getToken(): string | null {
+    return this.accessToken ?? null;
+  }
+
+  public isAuthenticated(): boolean {
+    return !!this.accessToken;
+  }
+
+  public logout() {
+    this.setToken(null);
+  }
+  
   private async request<T>(
     endpoint: string,
     options: RequestInit = {}
