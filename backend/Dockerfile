@@ -12,12 +12,25 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PORT=8000
 
 # Install deps in one layer (pin if you can)
+# Option A: install from requirements.txt (recommended for repeatable builds)
+# COPY requirements.txt .
+# RUN pip install --no-cache-dir -r requirements.txt
+# COPY . .
+#
+# Option B: inline pip install (keeps current behavior)
 RUN pip install --no-cache-dir \
     fastapi \
     uvicorn[standard] \
     python-multipart \
     mediapipe \
-    opencv-python-headless
+    opencv-python-headless \
+    tslearn \
+    numpy \
+    pydantic \
+    scipy \
+    pandas \
+    scikit-learn \
+    pathlib
 
 RUN pip install sqlalchemy
 RUN pip install numpy

@@ -11,13 +11,13 @@
     "lab_results_history": [
       {
         "id": "lab_1",
-        "date": "2025-09-15T10:00:00Z",
+        "date": "2025-09-15T10:00:00.000Z",
         "results": "CBC: Normal, Dopamine markers: Elevated (120 ng/mL), Glucose: 95 mg/dL",
         "added_by": "Dr. Smith"
       },
       {
         "id": "lab_2",
-        "date": "2025-08-01T14:30:00Z",
+        "date": "2025-08-01T14:30:00.000Z",
         "results": "CBC: Normal, Dopamine markers: 105 ng/mL, Cholesterol: 180 mg/dL",
         "added_by": "Dr. Johnson"
       }
@@ -34,12 +34,6 @@
         "date": "2025-08-15T16:45:00.000Z",
         "note": "Started on new L-DOPA regimen. Monitor for side effects.",
         "added_by": "Dr. Johnson"
-      },
-      {
-        "id": "note_1761857013735",
-        "date": "2025-10-30T20:43:33.735Z",
-        "note": "Test",
-        "added_by": "Current User"
       }
     ]
   },
@@ -75,12 +69,12 @@
       }
     ]
   },
-  "robertj3912847365": {
-    "patient_id": "robertj3912847365",
-    "name": "Robert Johnson",
-    "birthDate": "1957-07-22",
-    "height": "178.0",
-    "weight": "82.0",
+  "johns1759999595": {
+    "patient_id": "johns1759999595",
+    "name": "John Smith",
+    "birthDate": "",
+    "height": "175.0",
+    "weight": "75.0",
     "lab_results": {},
     "doctors_notes": "",
     "severity": "Stage 3",
@@ -113,12 +107,12 @@
       }
     ]
   },
-  "lindaw4578293617": {
-    "patient_id": "lindaw4578293617",
-    "name": "Linda Williams",
-    "birthDate": "1964-11-08",
-    "height": "162.0",
-    "weight": "59.0",
+  "testu1761296994": {
+    "patient_id": "testu1761296994",
+    "name": "Test User",
+    "birthDate": "1980-01-01",
+    "height": "170.0",
+    "weight": "70.0",
     "lab_results": {},
     "doctors_notes": "",
     "severity": "Stage 5",
@@ -151,12 +145,12 @@
       }
     ]
   },
-  "davidb5234876921": {
-    "patient_id": "davidb5234876921",
-    "name": "David Brown",
-    "birthDate": "1951-02-14",
-    "height": "175.0",
-    "weight": "77.0",
+  "uites1761297371": {
+    "patient_id": "uites1761297371",
+    "name": "UI Test User 1761297371",
+    "birthDate": "1990-01-01",
+    "height": "170.0",
+    "weight": "70.0",
     "lab_results": {},
     "doctors_notes": "",
     "severity": "Stage 5",
@@ -193,21 +187,14 @@
     "doctors_notes": "",
     "severity": "Stage 1",
     "lab_results_history": [],
-    "doctors_notes_history": [
-      {
-        "id": "note_susan_1",
-        "date": "2025-09-28T10:30:00Z",
-        "note": "Recently diagnosed, minimal symptoms. Patient adjusting well to initial medication regimen.",
-        "added_by": "Dr. Taylor"
-      }
-    ]
+    "doctors_notes_history": []
   },
-  "michaelm7456821093": {
-    "patient_id": "michaelm7456821093",
-    "name": "Michael Miller",
-    "birthDate": "1956-04-03",
-    "height": "183.0",
-    "weight": "85.0",
+  "johnd1761328672": {
+    "patient_id": "johnd1761328672",
+    "name": "John Doe",
+    "birthDate": null,
+    "height": "0.0",
+    "weight": "0.0",
     "lab_results": {},
     "doctors_notes": "",
     "severity": "Stage 3",
@@ -250,52 +237,26 @@
     "doctors_notes": "",
     "severity": "Stage 3",
     "lab_results_history": [],
-    "doctors_notes_history": [
-      {
-        "id": "note_nancy_1",
-        "date": "2025-09-25T15:20:00Z",
-        "note": "Cognitive changes noted during routine assessment. MoCA score: 24. Monitoring for progression.",
-        "added_by": "Dr. Roberts"
-      },
-      {
-        "id": "note_nancy_2",
-        "date": "2025-08-08T11:45:00Z",
-        "note": "Family reports mild memory issues. Cognitive screening scheduled.",
-        "added_by": "Dr. Roberts"
-      }
-    ]
+    "doctors_notes_history": []
   },
-  "jamesm9876543210": {
-    "patient_id": "jamesm9876543210",
-    "name": "James Moore",
-    "birthDate": "1954-01-16",
-    "height": "172.0",
-    "weight": "74.0",
+  "alber1761328672": {
+    "patient_id": "alber1761328672",
+    "name": "Albert Johnson",
+    "birthDate": null,
+    "height": "0.0",
+    "weight": "0.0",
     "lab_results": {},
     "doctors_notes": "",
     "severity": "Stage 3",
     "lab_results_history": [],
-    "doctors_notes_history": [
-      {
-        "id": "note_james_1",
-        "date": "2025-09-23T13:15:00Z",
-        "note": "Sleep disturbances affecting quality of life. Started melatonin 3mg. Sleep study recommended.",
-        "added_by": "Dr. Clark"
-      },
-      {
-        "id": "note_james_2",
-        "date": "2025-07-30T16:00:00Z",
-        "note": "Patient reports frequent nighttime awakenings and REM sleep behavior disorder symptoms.",
-        "added_by": "Dr. Clark"
-      }
-    ]
+    "doctors_notes_history": []
   },
-  "patriciaa1234567890": {
-    "patient_id": "patriciaa1234567890",
-    "name": "Patricia Anderson",
-    "birthDate": "1962-06-30",
-    "height": "157.0",
-    "weight": "61.0",
+  "emily1761328673": {
+    "patient_id": "emily1761328673",
+    "name": "Emily Davis",
+    "birthDate": null,
+    "height": "0.0",
+    "weight": "0.0",
     "lab_results": {},
     "doctors_notes": "",
     "severity": "Stage 2",
@@ -457,12 +418,12 @@
     "lab_results_history": [],
     "doctors_notes_history": []
   },
-  "kennethl6789012345": {
-    "patient_id": "kennethl6789012345",
-    "name": "Kenneth Lewis",
-    "birthDate": "1963-11-13",
-    "height": "174.0",
-    "weight": "73.0",
+  "emily1761328739": {
+    "patient_id": "emily1761328739",
+    "name": "Emily Davis",
+    "birthDate": null,
+    "height": "170.0",
+    "weight": "70.0",
     "lab_results": {},
     "doctors_notes": "",
     "severity": "Stage 2",
@@ -507,24 +468,24 @@
     "lab_results_history": [],
     "doctors_notes_history": []
   },
-  "paulh8901234567": {
-    "patient_id": "paulh8901234567",
-    "name": "Paul Hall",
-    "birthDate": "1952-04-21",
-    "height": "169.0",
-    "weight": "71.0",
+  "johnd1761330319": {
+    "patient_id": "johnd1761330319",
+    "name": "John Doe",
+    "birthDate": null,
+    "height": "170.0",
+    "weight": "70.0",
     "lab_results": {},
     "doctors_notes": "Non-motor symptoms predominant",
     "severity": "Stage 3",
     "lab_results_history": [],
     "doctors_notes_history": []
   },
-  "heleny9012345678": {
-    "patient_id": "heleny9012345678",
-    "name": "Helen Young",
-    "birthDate": "1960-02-28",
-    "height": "161.0",
-    "weight": "60.0",
+  "janes1761330319": {
+    "patient_id": "janes1761330319",
+    "name": "Jane Smith",
+    "birthDate": null,
+    "height": "170.0",
+    "weight": "70.0",
     "lab_results": {},
     "doctors_notes": "",
     "severity": "Stage 4",
@@ -569,24 +530,24 @@
     "lab_results_history": [],
     "doctors_notes_history": []
   },
-  "dorisg1234567890": {
-    "patient_id": "dorisg1234567890",
-    "name": "Doris Green",
-    "birthDate": "1948-12-03",
-    "height": "158.0",
-    "weight": "55.0",
+  "emily1761330319": {
+    "patient_id": "emily1761330319",
+    "name": "Emily Davis",
+    "birthDate": null,
+    "height": "170.0",
+    "weight": "70.0",
     "lab_results": {},
     "doctors_notes": "Significant motor fluctuations",
     "severity": "Stage 5",
     "lab_results_history": [],
     "doctors_notes_history": []
   },
-  "stevens2345678901": {
-    "patient_id": "stevens2345678901",
-    "name": "Steven Scott",
-    "birthDate": "1959-01-25",
-    "height": "177.0",
-    "weight": "79.0",
+  "micha1761330319": {
+    "patient_id": "micha1761330319",
+    "name": "Michael Brown",
+    "birthDate": null,
+    "height": "170.0",
+    "weight": "70.0",
     "lab_results": {},
     "doctors_notes": "Stable on current medication regimen",
     "severity": "Stage 2",

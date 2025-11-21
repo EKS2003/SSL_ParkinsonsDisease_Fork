@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowUpDown, CalendarClock, FileText, Loader2, Plus, Search, Stethoscope, User, UserPlus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -93,10 +93,13 @@ const PatientList = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const { toast } = useToast();
   const { isConnected, isChecking } = useApiStatus();
+
   const [sortField, setSortField] = useState<SortField>('lastName');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
+  const [csvFile, setCsvFile] = useState<File | null>(null);
+  const [csvUploading, setCsvUploading] = useState(false);
+  const csvFileInputRef = useRef<HTMLInputElement>(null);
 
-  // Quick add form state
   const [quickFormData, setQuickFormData] = useState({
     firstName: '',
     lastName: '',
@@ -105,7 +108,6 @@ const PatientList = () => {
     severity: '' as Patient['severity'],
   });
 
-  // Fetch patients on component mount
   useEffect(() => {
     fetchPatients();
   }, []);
@@ -134,6 +136,305 @@ const PatientList = () => {
       });
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleCsvUploadClick = () => {
+    if(csvFileInputRef.current){
+      csvFileInputRef.current.value = "";
+      csvFileInputRef.current.click();
+    }
+  };
+
+  const handleCsvFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0] || null;
+    if (!file.name.endsWith('.csv')) {
+      toast({
+        title: "Invalid File Type",
+        description: "Please upload a valid CSV file.",
+        variant: "destructive",
+      });
+      return;
+    }
+    setCsvFile(file);
+  };
+
+  const parseCSVLine = (line: string) => {
+    const result: string[] = [];
+    let cur = '';
+    let inQuotes = false;
+    for (let i = 0; i < line.length; i++) {
+      const ch = line[i];
+      if (ch === '"' && line[i + 1] === '"') {
+        cur += '"';
+        i++; // skip escape
+        continue;
+      }
+      if (ch === '"') {
+        inQuotes = !inQuotes;
+        continue;
+      }
+      if (ch === ',' && !inQuotes) {
+        result.push(cur.trim());
+        cur = '';
+        continue;
+      }
+      cur += ch;
+    }
+    result.push(cur.trim());
+    return result;
+  };
+
+  const normalizeHeaderName = (h: string) => {
+    return h
+      .toLowerCase()
+      .replace(/[^a-z0-9]/g, '')
+      .trim();
+  }
+
+  // Parse several common date formats and return ISO yyyy-mm-dd or null
+  // ISO means ISO 8601 date format
+  const parseDateToISO = (val: string): string | null => {
+    if (!val) return null;
+    const s = val.trim();
+
+    // If already ISO yyyy-mm-dd
+    if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+
+    // Match numeric formats like dd-mm-yyyy, dd/mm/yyyy, mm/dd/yyyy
+    const m = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
+    if (m) {
+      const a = Number(m[1]);
+      const b = Number(m[2]);
+      const y = Number(m[3]);
+
+      let day: number;
+      let month: number;
+
+      // If first component > 12 it's day
+      if (a > 12) {
+        day = a; month = b;
+      } else if (b > 12) {
+        // If second component > 12 treat first as day
+        day = a; month = b;
+      } else {
+        // Ambiguous: use '-' as dd-mm-yyyy heuristic, '/' as mm/dd/yyyy
+        if (s.includes('-')) {
+          day = a; month = b;
+        } else {
+          month = a; day = b;
+        }
+      }
+
+      if (month < 1 || month > 12 || day < 1 || day > 31) return null;
+      const mm = String(month).padStart(2, '0');
+      const dd = String(day).padStart(2, '0');
+      return `${y}-${mm}-${dd}`;
+    }
+
+    const d = new Date(s);
+    if (!isNaN(d.getTime())) return d.toISOString().slice(0, 10);
+    return null;
+  };
+
+  const headerToKey = (h:string) => {
+    const n = normalizeHeaderName(h);
+
+    if (['firstname', 'first', 'givenname', 'given'].includes(n)) return 'firstName';
+    if (['lastname', 'last', 'surname', 'familyname'].includes(n)) return 'lastName';
+    if (['fullname', 'name', 'fullName', 'fullname'].includes(n.toLowerCase())) return 'fullName';
+    if (['birthdate', 'dob', 'dateofbirth', 'birth'].includes(n)) return 'birthDate';
+    if (['height', 'ht'].includes(n)) return 'height';
+    if (['weight', 'wt'].includes(n)) return 'weight';
+    if (['recordnumber', 'recordno', 'record', 'id', 'patientid'].includes(n)) return 'recordNumber';
+    if (['severity', 'stage', 'parkinsonseverity'].includes(n)) return 'severity';
+    if (['labresults', 'lab_result', 'labs', 'lab'].includes(n)) return 'labResults';
+    if (['doctornotes', 'doctornote', 'notes', 'note'].includes(n)) return 'doctorNotes';
+    return n; // fallback: keep original normalized header
+  }
+
+  const normalizeSeverity = (val: string | undefined | null) => {
+    if (!val) return '';
+    const v = val.trim();
+    const num = parseInt(v, 10);
+
+    if (!isNaN(num) && num >= 1 && num <= 5) return `Stage ${num}`;
+
+    const m = v.match(/([sS]tage)[_\-\s]?([1-5])/);
+    if (m) return `Stage ${m[2]}`;
+
+    const m2 = v.match(/^[Ss]tage\s*[1-5]$/);
+
+    if (m2) return v.startsWith('Stage') ? v : `Stage ${v.replace(/\D/g, '')}`;
+
+    const low = ['mild', 'low', 'stage1', 'stage_1'];
+    const med = ['moderate', 'medium', 'stage3', 'stage_3'];
+    const high = ['severe', 'high', 'stage5', 'stage_5'];
+    const lower = v.toLowerCase();
+    if (low.includes(lower)) return 'Stage 1';
+    if (med.includes(lower)) return 'Stage 3';
+    if (high.includes(lower)) return 'Stage 5';
+    return v;
+  };
+
+  const processCsvFile = async () => {
+    if (!csvFile) return;
+    setCsvUploading(true);
+    try {
+      const text = await csvFile.text();
+      const lines = text.split(/\r?\n/).filter(l => l.trim().length > 0);
+      if (lines.length < 2) {
+        toast({
+          title: 'Empty CSV',
+          description: 'CSV must contain a header and at least one data row.',
+          variant: 'destructive',
+        });
+        setCsvUploading(false);
+        return;
+      }
+
+      const rawHeader = parseCSVLine(lines[0]);
+      const headerMap: Record<number, string> = {};
+      rawHeader.forEach((h, idx) => {
+        headerMap[idx] = headerToKey(h);
+      });
+
+      const rows = lines.slice(1);
+      const toCreate: any[] = [];
+      for (const row of rows) {
+        const cols = parseCSVLine(row);
+        if (cols.every(c => c === '')) continue;
+
+        const item: any = {
+          firstName: '',
+          lastName: '',
+          recordNumber: '',
+          birthDate: '',
+          height: '',
+          weight: '',
+          labResults: '{}',
+          doctorNotes: '',
+          severity: '',
+        };
+
+        for (let i = 0; i < cols.length; i++) {
+          const key = headerMap[i];
+          const val = cols[i] ?? '';
+          if (!key) continue;
+          switch (key) {
+            case 'firstName':
+              item.firstName = val;
+              break;
+            case 'lastName':
+              item.lastName = val;
+              break;
+            case 'fullName':
+              {
+                const parts = val.split(/\s+/);
+                item.firstName = parts.shift() || '';
+                item.lastName = parts.join(' ') || '';
+              }
+              break;
+            case 'birthDate':
+              {
+                // try to normalize common date formats to yyyy-mm-dd
+                const iso = parseDateToISO(val);
+                if (iso) {
+                  item.birthDate = iso;
+                } else {
+                  item.birthDate = val || '';
+                }
+              }
+              break;
+            case 'height':
+              item.height = val;
+              break;
+            case 'weight':
+              item.weight = val;
+              break;
+            case 'recordNumber':
+              item.recordNumber = val;
+              break;
+            case 'severity':
+              item.severity = normalizeSeverity(val);
+              break;
+            case 'labResults':
+              try {
+                item.labResults = JSON.stringify(JSON.parse(val));
+              } catch {
+                item.labResults = JSON.stringify({ notes: val });
+              }
+              break;
+            case 'doctorNotes':
+              item.doctorNotes = val;
+              break;
+            default:
+              // unknown header, ignores it
+              break;
+          }
+        }
+
+        // Default values for missing fields
+        if (!item.firstName && !item.lastName) {
+          item.firstName = 'Unknown';
+          item.lastName = 'Patient';
+        }
+        if (!item.recordNumber) {
+          item.recordNumber = `csv-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+        }
+        if (!item.height) item.height = '170 cm';
+        if (!item.weight) item.weight = '70 kg';
+        if (!item.labResults) item.labResults = JSON.stringify({});
+        if (!item.doctorNotes) item.doctorNotes = '';
+        if (!item.severity) item.severity = 'Stage 1';
+        if (!item.birthDate) item.birthDate = '';
+        toCreate.push(item);
+      }
+
+      if (toCreate.length === 0) {
+        toast({
+          title: 'No valid rows',
+          description: 'No valid patient rows found in CSV.',
+          variant: 'destructive',
+        });
+        setCsvUploading(false);
+        return;
+      }
+
+      let successCount = 0;
+      let failCount = 0;
+      for (const p of toCreate) {
+        try {
+          const response = await apiService.createPatient(p);
+          if (response.success && response.data) {
+            setPatients(prev => [...prev, response.data]);
+            successCount++;
+          } else {
+            failCount++;
+            console.error('Create patient failed response:', response);
+          }
+        } catch (err) {
+          failCount++;
+          console.error('Create patient error:', err);
+        }
+      }
+
+      toast({
+        title: 'CSV Upload Complete',
+        description: `Imported ${successCount} patients. ${failCount} failures.`,
+      });
+
+      setCsvFile(null);
+      setIsModalOpen(false);
+    } catch (error) {
+      console.error('Error processing CSV:', error);
+      toast({
+        title: "Error",
+        description: "Failed to read the CSV file.",
+        variant: "destructive",
+      });
+    } finally {
+      setCsvUploading(false);
     }
   };
 
@@ -311,17 +612,17 @@ const PatientList = () => {
               )}
             </div>
             <div className="flex items-center space-x-3">
-              {/* Quick Add Modal */}
+              {/* Upload Modal */}
               <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
                 <DialogTrigger asChild>
                   <Button variant="outline" className="border-primary text-primary hover:bg-primary hover:text-primary-foreground">
                     <UserPlus className="mr-2 h-4 w-4" />
-                    Quick Add
+                    Upload Patient
                   </Button>
                 </DialogTrigger>
-                <DialogContent className="sm:max-w-md">
+                <DialogContent className="w-full sm:max-w-4xl max-w-4xl">
                   <DialogHeader>
-                    <DialogTitle>Quick Add Patient</DialogTitle>
+                    <DialogTitle>Upload Patients CSV</DialogTitle> {/*Need to implement upload csv function*/}
                   </DialogHeader>
                   <form onSubmit={handleQuickSubmit} className="space-y-4">
                     <div className="grid grid-cols-2 gap-4">
@@ -386,13 +687,9 @@ const PatientList = () => {
                       </Select>
                     </div>
 
-                    <div className="flex justify-end space-x-3 pt-4">
-                      <Button type="button" variant="outline" onClick={() => setIsModalOpen(false)}>
-                        Cancel
-                      </Button>
-                      <Button type="submit" className="bg-primary hover:bg-gradient-primary-hover">
-                        <UserPlus className="mr-2 h-4 w-4" />
-                        Add Patient
+                    <div className="flex justify-end">
+                      <Button variant="outline" onClick={() => setIsModalOpen(false)}>
+                        Close
                       </Button>
                     </div>
                   </form>
@@ -421,7 +718,7 @@ const PatientList = () => {
               placeholder="Search patients by name or record number..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-10"
+              className="pl-10 w-full md:w-[380px]"
             />
           </div>
           <div className="flex w-full flex-col gap-3 sm:w-auto sm:flex-row sm:items-center">

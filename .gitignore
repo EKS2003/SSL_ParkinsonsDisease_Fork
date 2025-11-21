@@ -54,6 +54,20 @@ venv/
 *.sln
 *.sw?
 
+#DB Files
+*.db
+
+#python-compiler
+*.pyc
+
+# #json files
+# *.json removed because it would mess up the package.json
+
+#media files
+*.mp4
+*.mkv
+*.avi
+*.mov
 # =========================================================
 # OS-specific
 # =========================================================
@@ -76,7 +90,10 @@ frontend/src/pages/VideoRecording copy.tsx
 /backend/recordings
 /backend/dtw_runs/finger-tapping
 /backend/dtw_runs/fist-open-close
-meta.json
+
+# data files
+backend/patients.json
+backend/patients.json.backupmeta.json
 test_history.json
 backend/test_history.json
 backend/test_history.json

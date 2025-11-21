@@ -10,6 +10,8 @@ import TestSelection from "./pages/TestSelection";
 import VideoRecording from "./pages/VideoRecording";
 import VideoSummary from "./pages/VideoSummary";
 import NotFound from "./pages/NotFound";
+import Login from "./pages/Login";
+import Register from "./pages/Register";
 
 const queryClient = new QueryClient();
 
@@ -27,6 +29,8 @@ const App = () => (
           <Route path="/patient/:id/test-selection" element={<TestSelection />} />
           <Route path="/patient/:id/video-recording/:testId" element={<VideoRecording />} />
           <Route path="/patient/:id/video-summary/:testId" element={<VideoSummary />} />
+          <Route path="/login" element={<Login />}/>
+          <Route path="/register" element={<Register />}/>
           <Route path="*" element={<NotFound />} />
         </Routes>
       </BrowserRouter>

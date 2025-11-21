@@ -29,6 +29,8 @@ const PatientForm = () => {
     doctorNotes: "",
     severity: "" as Patient["severity"],
   });
+  // Calculate age from birthDate
+  const age = formData.birthDate ? calculateAge(formData.birthDate) : '';
   const [loading, setLoading] = useState(false);
 
   const handleInputChange = (field: string, value: string) => {
@@ -250,6 +252,15 @@ const PatientForm = () => {
                       required
                     />
                   </div>
+                  {/* <div className="space-y-2">
+                    <Label htmlFor="age">Age</Label>
+                    <Input
+                      id="age"
+                      value={age}
+                      readOnly
+                      disabled
+                    />
+                  </div> */}
 
                   <div className="space-y-2">
                     <Label htmlFor="height">Height</Label>
