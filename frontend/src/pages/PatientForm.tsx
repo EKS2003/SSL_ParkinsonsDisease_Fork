@@ -11,7 +11,7 @@ import { useToast } from '@/hooks/use-toast';
 import { Patient } from '@/types/patient';
 import apiService from '@/services/api/api';
 import { normalizeBirthDate } from '@/services/api/mappers/testMapper';
-
+import { calculateAge } from '@/services/api/mappers/testMapper';
 const PatientForm = () => {
   const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
