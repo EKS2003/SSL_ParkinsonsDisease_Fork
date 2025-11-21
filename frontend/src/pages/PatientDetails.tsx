@@ -23,7 +23,8 @@ import {
   TestIndicator,
 } from "@/types/patient";
 import { getSeverityColor, calculateAge } from "@/lib/utils";
-import apiService, { mapSeverity } from "@/services/api/api";
+import apiService from "@/services/api/api";
+import { mapSeverity } from "@/services/api/mappers/testMapper";
 import {
   Dialog,
   DialogContent,
@@ -185,20 +186,17 @@ const PatientDetails = () => {
     setIsLabResultModalOpen(false);
 
     try {
-      const res = await fetch(`http://localhost:8000/patients/${patient.id}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          lab_results: {
-            id: `lab_${Date.now()}`, // optional, or omit and let backend/DB assign
-            date:  toLocalISO(),
-            added_by: "Unknown",
-            results: newLabResult.trim(), // <-- plain string, not { value: ... }
-          },
-        }),
-      });
-      const text = await res.text();
-      if (!res.ok) throw new Error(`Save failed ${res.status}: ${text}`);
+
+      const res = await apiService.addLabResult(patient.id, {
+  id: newEntry.id,
+  date: toLocalISO(),
+  added_by: newEntry.addedBy ?? null,
+  results: newEntry.results,
+});
+      if (!res.success) {
+        throw new Error(res.error || "Failed to save lab result");
+      }
+
       toast({
         title: "Lab Result Added",
         description: "Recorded successfully.",
@@ -238,21 +236,17 @@ const PatientDetails = () => {
     setIsDoctorNoteModalOpen(false);
 
     try {
-      const res = await fetch(`http://localhost:8000/patients/${patient.id}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          doctors_notes: 
-            {
-              id: newEntry.id,
-              date: toLocalISO(),
-              note: newEntry.note,
-              added_by: newEntry.addedBy ?? null,
-            }, 
-        }),
+      const res = await apiService.addDoctorNote(patient.id, {
+        id: newEntry.id,
+        date: toLocalISO(),
+        note: newEntry.note,
+        added_by: newEntry.addedBy ?? null,
       });
-      const text = await res.text();
-      if (!res.ok) throw new Error(`Save failed ${res.status}: ${text}`);
+
+      if (!res.success) {
+        throw new Error(res.error || "Failed to save doctor's note");
+      }
+
       toast({ title: "Note Added", description: "Recorded successfully." });
     } catch (e) {
       console.error("Error saving doctor note:", e);

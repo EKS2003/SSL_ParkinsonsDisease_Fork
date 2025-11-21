@@ -9,7 +9,8 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
 import { Patient } from '@/types/patient';
-import apiService, { normalizeBirthDate } from '@/services/api/api';
+import apiService from '@/services/api/api';
+import { normalizeBirthDate } from '@/services/api/mappers/testMapper';
 
 const PatientForm = () => {
   const navigate = useNavigate();

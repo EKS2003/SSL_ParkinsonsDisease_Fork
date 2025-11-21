@@ -42,27 +42,17 @@ import {
   Customized,
 } from "recharts";
 import { Test } from "@/types/patient";
-import { API_BASE } from "@/services/base";
-import {
-  canonicalTests,
+import apiService from "@/services/api/api";
+import {  AxisAggResponse,
   CanonicalTest,
   DtwSessionMeta,
-  AxisAggResponse,
   DtwSeriesMetrics,
+  DtwSeriesCurve,
   normalizeTestKey,
-  DtwSeriesCurve
-} from "@/types/dtw";
+  canonicalTests
+  } from "@/types/dtw";
 
-import {
-  resolveDtwRoute,
-  listDtwSessions,
-  getDtwSeriesMetrics,
-  getAxisAggregate,
-  listTestVideos,
-  downloadDtwPayload,
-} from '@/services/api/dtw'
-
-
+import { API_BASE_URL } from "@/services/api/mappers/testMapper";
 
 /* ===================== Mock (unchanged) ===================== */
 const mockTestHistory: Test[] = [
@@ -272,7 +262,7 @@ function DtwAggregatePanels({
       setLoading(true);
       setErr(null);
       try {
-        const json = await getAxisAggregate(
+        const result = await apiService.getAxisAggregate(
           {
             testKey,
             sessionId,
@@ -284,11 +274,7 @@ function DtwAggregatePanels({
           ctrl.signal
         );
         if (!aborted) {
-          if (json?.ok) setData(json);
-          else {
-            setData(null);
-            setErr("Failed to load aggregated series");
-          }
+          setData(result);
         }
       } catch (e: any) {
         if (!aborted) {
@@ -517,7 +503,7 @@ const VideoSummary = () => {
 
   const videoSrc =
     normalizedVideoName != null
-      ? `${API_BASE}/recordings/${encodeURIComponent(normalizedVideoName)}`
+      ? `${API_BASE_URL}/recordings/${encodeURIComponent(normalizedVideoName)}`
       : null;
 
   useEffect(() => {
@@ -551,7 +537,7 @@ const VideoSummary = () => {
 
     (async () => {
       try {
-        const data = await resolveDtwRoute(testId, ctrl.signal);
+        const data = await apiService.resolveDtwRoute(testId, ctrl.signal);
         const key = normalizeTestKey(data.testName);
         if (!key) {
           throw new Error(
@@ -586,32 +572,32 @@ useEffect(() => {
   let cancelled = false;
 
   (async () => {
-    try {
-      const data = await listTestVideos(id, testKey, ctrl.signal);
-      console.log("Videos API response:", data);
-      if (!cancelled) {
-        if (data.success && data.videos?.length > 0) {
-          setVideoList(data.videos);
-          setSelectedVideo(data.videos[0]);
-        } else {
+      try {
+        const data = await apiService.listTestVideos(id, testKey, ctrl.signal);
+        console.log("Videos API response:", data);
+        if (!cancelled) {
+          if (data.success && data.videos?.length > 0) {
+            setVideoList(data.videos);
+            setSelectedVideo(data.videos[0]);
+          } else {
+            setVideoList([]);
+            setSelectedVideo(null);
+          }
+        }
+      } catch (e) {
+        console.error("Error fetching videos:", e);
+        if (!cancelled) {
           setVideoList([]);
           setSelectedVideo(null);
         }
       }
-    } catch (e) {
-      console.error("Error fetching videos:", e);
-      if (!cancelled) {
-        setVideoList([]);
-        setSelectedVideo(null);
-      }
-    }
-  })();
+    })();
 
-  return () => {
-    cancelled = true;
-    ctrl.abort();
-  };
-}, [routeResolved, id, testKey]);
+    return () => {
+      cancelled = true;
+      ctrl.abort();
+    };
+  }, [routeResolved, id, testKey]);
 
 
   // List DTW sessions
@@ -621,28 +607,26 @@ useEffect(() => {
       let cancelled = false;
 
       (async () => {
-        try {
-          const data = await listDtwSessions(testKey, ctrl.signal);
-          if (!cancelled) {
-            setSessions(data);
-            setSessionId((prev) => prev ?? data[0]?.session_id ?? null);
-          }
-        } catch (e: any) {
-          if (!cancelled) {
-            setSessions([]);
-            setSessionId(null);
-            setErrMsg(
-              e?.message || "No DTW sessions found for this test."
-            );
-          }
+      try {
+        const data = await apiService.listDtwSessions(testKey, ctrl.signal);
+        if (!cancelled) {
+          setSessions(data);
+          setSessionId((prev) => prev ?? data[0]?.session_id ?? null);
         }
-      })();
+      } catch (e: any) {
+        if (!cancelled) {
+          setSessions([]);
+          setSessionId(null);
+          setErrMsg(e?.message || "No DTW sessions found for this test.");
+        }
+      }
+    })();
 
-      return () => {
-        cancelled = true;
-        ctrl.abort();
-      };
-    }, [routeResolved, testKey]);
+    return () => {
+      cancelled = true;
+      ctrl.abort();
+    };
+  }, [routeResolved, testKey]);
 
 
   // Fetch KPI metrics (distance, avg step cost, similarity) from /series
@@ -657,54 +641,55 @@ useEffect(() => {
   let cancelled = false;
 
   (async () => {
-    try {
-      setMetricsLoading(true);
-      setMetricsErr(null);
-      const data = await getDtwSeriesMetrics(
-        testKey,
-        sessionId,
-        200,
-        ctrl.signal
-      );
-      if (!cancelled) {
-        setMetrics(data);
+      try {
+        setMetricsLoading(true);
+        setMetricsErr(null);
+        const data = await apiService.getDtwSeriesMetrics(
+          testKey,
+          sessionId,
+          200,
+          ctrl.signal
+        );
+        if (!cancelled) {
+          setMetrics(data);
+        }
+      } catch (e: any) {
+        if (!cancelled) {
+          setMetrics(null);
+          setMetricsErr(e?.message || "Failed to load DTW metrics");
+        }
+      } finally {
+        if (!cancelled) setMetricsLoading(false);
       }
-    } catch (e: any) {
-      if (!cancelled) {
-        setMetrics(null);
-        setMetricsErr(e?.message || "Failed to load DTW metrics");
-      }
-    } finally {
-      if (!cancelled) setMetricsLoading(false);
-    }
-  })();
+    })();
 
-  return () => {
-    cancelled = true;
-    ctrl.abort();
-  };
-}, [testKey, sessionId]);
+    return () => {
+      cancelled = true;
+      ctrl.abort();
+    };
+  }, [testKey, sessionId]);
+
 
 
   const onExport = async () => {
-  if (!testKey || !sessionId) return;
-  try {
-    const payload = await downloadDtwPayload(testKey, sessionId);
-    const blob = new Blob([JSON.stringify(payload, null, 2)], {
-      type: "application/json",
-    });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `dtw_${testKey}_${sessionId}.json`;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    URL.revokeObjectURL(url);
-  } catch (e) {
-    console.error(e);
-  }
-};
+    if (!testKey || !sessionId) return;
+    try {
+      const payload = await apiService.downloadDtwPayload(testKey, sessionId);
+      const blob = new Blob([JSON.stringify(payload, null, 2)], {
+        type: "application/json",
+      });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `dtw_${testKey}_${sessionId}.json`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      console.error(e);
+    }
+  };
 
 
   return (

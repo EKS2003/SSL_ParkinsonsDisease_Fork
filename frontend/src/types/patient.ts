@@ -76,3 +76,14 @@ export const AVAILABLE_TESTS = [
   { id: 'finger-tapping', name: 'Finger Tapping Test', description: 'Measures rapid finger tapping for motor speed and coordination' },
   { id: 'fist-open-close', name: 'Fist Open and Close Test', description: 'Assesses hand opening and closing cycles for bradykinesia' }
 ] as const;
+
+export interface PatientUpdateResponse{
+  name?: string,
+  birthDate?: Date,
+  height?: number,
+  weight?: number,
+  lab_results?: [LabResultEntry],
+  doctors_notes?: [DoctorNoteEntry],
+  severity?: string
+
+}
