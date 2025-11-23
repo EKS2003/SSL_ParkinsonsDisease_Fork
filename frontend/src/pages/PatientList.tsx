@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
-import { Link } from 'react-router-dom';
-import { ArrowUpDown, CalendarClock, FileText, Loader2, Plus, Search, Stethoscope, User, UserPlus } from 'lucide-react';
+import { Link, useNavigate } from 'react-router-dom';
+import { Upload, ArrowUpDown, CalendarClock, FileText, Loader2, Plus, Search, Stethoscope, User, UserPlus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -10,6 +10,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Patient, DoctorNoteEntry } from '@/types/patient';
 import apiService from '@/services/api/api';
 import { normalizeBirthDate } from '@/services/api/mappers/testMapper';
@@ -87,12 +88,24 @@ const resolvePrimaryPhysician = (patient: Patient): string => {
 };
 
 const PatientList = () => {
+  const navigate = useNavigate();
   const [searchTerm, setSearchTerm] = useState('');
   const [patients, setPatients] = useState<Patient[]>([]);
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const { toast } = useToast();
   const { isConnected, isChecking } = useApiStatus();
+
+  // Mock user data - replace with actual user data from auth context
+  const [currentUser] = useState({
+    firstName: 'John',
+    lastName: 'Doe',
+    profileImage: '', // Add actual profile image URL if available
+  });
+
+  const getUserInitials = () => {
+    return `${currentUser.firstName[0]}${currentUser.lastName[0]}`.toUpperCase();
+  };
 
   const [sortField, setSortField] = useState<SortField>('lastName');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
@@ -385,7 +398,7 @@ const PatientList = () => {
         if (!item.height) item.height = '170 cm';
         if (!item.weight) item.weight = '70 kg';
         if (!item.labResults) item.labResults = JSON.stringify({});
-        if (!item.doctorNotes) item.doctorNotes = '';
+        if (!item.doctorNotes) item.doctorNotes = 'n/a';
         if (!item.severity) item.severity = 'Stage 1';
         if (!item.birthDate) item.birthDate = '';
         toCreate.push(item);
@@ -601,7 +614,7 @@ const PatientList = () => {
           <div className="flex items-center justify-between">
             <div>
               <h1 className="text-3xl font-bold text-foreground">Patient Management</h1>
-              <p className="text-muted-foreground mt-1">Parkinson's Disease Monitoring System</p>
+              <p className="text-muted-foreground mt-1">Parkinson's Artificial Intelligence Diagnosis Tool</p>
               {!isChecking && (
                 <div className="flex items-center mt-2">
                   <div className={`w-2 h-2 rounded-full mr-2 ${isConnected ? 'bg-green-500' : 'bg-red-500'}`} />
@@ -611,98 +624,133 @@ const PatientList = () => {
                 </div>
               )}
             </div>
-            <div className="flex items-center space-x-3">
-              {/* Upload Modal */}
-              <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
-                <DialogTrigger asChild>
-                  <Button variant="outline" className="border-primary text-primary hover:bg-primary hover:text-primary-foreground">
-                    <UserPlus className="mr-2 h-4 w-4" />
-                    Upload Patient
+            <div className="flex flex-col items-end space-y-3">
+              {/* Profile Avatar */}
+              <button
+                onClick={() => navigate('/profile')}
+                className="group relative"
+                aria-label="View profile"
+              >
+                <Avatar className="h-10 w-10 cursor-pointer ring-2 ring-transparent hover:ring-primary transition-all">
+                  <AvatarImage src={currentUser.profileImage} alt="Profile" />
+                  <AvatarFallback className="bg-primary text-primary-foreground text-sm">
+                    {getUserInitials()}
+                  </AvatarFallback>
+                </Avatar>
+                <div className="absolute -bottom-8 right-0 bg-popover text-popover-foreground text-xs px-2 py-1 rounded shadow-md opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none">
+                  View Profile
+                </div>
+              </button>
+
+              {/* Action Buttons */}
+              <div className="flex items-center space-x-3">
+                {/* Upload Modal */}
+                <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
+                  <DialogTrigger asChild>
+                    <Button variant="outline" className="border-primary text-primary hover:bg-primary hover:text-primary-foreground">
+                      <UserPlus className="mr-2 h-4 w-4" />
+                      Upload Patient
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent className="w-full sm:max-w-2xl">
+                    <DialogHeader>
+                      <DialogTitle>Upload Patients from CSV</DialogTitle>
+                    </DialogHeader>
+                    <div className="space-y-6 py-4">
+                      {/* File Upload Section */}
+                      <div className="space-y-4">
+                        <div className="flex flex-col items-center justify-center border-2 border-dashed border-muted-foreground/25 rounded-lg p-8 hover:border-primary/50 transition-colors">
+                          <Upload className="h-12 w-12 text-muted-foreground mb-4" />
+                          <Button 
+                            type="button"
+                            variant="outline" 
+                            onClick={handleCsvUploadClick}
+                            className="mb-2"
+                          >
+                            <Upload className="mr-2 h-4 w-4" />
+                            {csvFile ? 'Change CSV File' : 'Select CSV File'}
+                          </Button>
+                          <p className="text-sm text-muted-foreground">
+                            Upload a CSV file containing patient information
+                          </p>
+                          <input 
+                            ref={csvFileInputRef}
+                            type="file"
+                            accept=".csv"
+                            onChange={handleCsvFileChange}
+                            className="hidden"
+                          />
+                        </div>
+
+                        {/* File Selected Message */}
+                        {csvFile && (
+                          <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-4">
+                            <div className="flex items-center gap-2">
+                              <div className="h-2 w-2 rounded-full bg-green-500" />
+                              <p className="text-sm font-medium text-green-900 dark:text-green-100">
+                                File uploaded: <span className="font-semibold">{csvFile.name}</span>
+                              </p>
+                            </div>
+                            <p className="text-xs text-green-700 dark:text-green-300 mt-1 ml-4">
+                              Size: {(csvFile.size / 1024).toFixed(2)} KB
+                            </p>
+                          </div>
+                        )}
+
+                        {/* CSV Format Info */}
+                        <div className="bg-muted/50 rounded-lg p-4">
+                          <h4 className="text-sm font-semibold mb-2">CSV Format Requirements:</h4>
+                          <ul className="text-xs text-muted-foreground space-y-1">
+                            <li>• Headers: firstName, lastName, birthDate, recordNumber, severity</li>
+                            <li>• Severity: Use "Stage 1" through "Stage 5" or numbers 1-5</li>
+                            <li>• Birth Date: Use YYYY-MM-DD format (e.g., 1980-05-12)</li>
+                            <li>• Optional fields: height, weight, labResults, doctorNotes</li>
+                          </ul>
+                        </div>
+                      </div>
+
+                      {/* Action Buttons */}
+                      <div className="flex justify-end gap-3">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          onClick={() => {
+                            setIsModalOpen(false);
+                            setCsvFile(null);
+                          }}
+                        >
+                          Cancel
+                        </Button>
+                        <Button
+                          type="button"
+                          onClick={processCsvFile}
+                          disabled={!csvFile || csvUploading}
+                        >
+                          {csvUploading ? (
+                            <>
+                              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                              Uploading...
+                            </>
+                          ) : (
+                            <>
+                              <Upload className="mr-2 h-4 w-4" />
+                              Import Patients
+                            </>
+                          )}
+                        </Button>
+                      </div>
+                    </div>
+                  </DialogContent>
+                </Dialog>
+
+                {/* Full Form Link */}
+                <Link to="/patient-form">
+                  <Button className="bg-primary hover:bg-primary-hover text-primary-foreground">
+                    <Plus className="mr-2 h-4 w-4" />
+                    Detailed Form
                   </Button>
-                </DialogTrigger>
-                <DialogContent className="w-full sm:max-w-4xl max-w-4xl">
-                  <DialogHeader>
-                    <DialogTitle>Upload Patients CSV</DialogTitle> {/*Need to implement upload csv function*/}
-                  </DialogHeader>
-                  <form onSubmit={handleQuickSubmit} className="space-y-4">
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <Label htmlFor="quick-firstName">First Name *</Label>
-                        <Input
-                          id="quick-firstName"
-                          placeholder="John"
-                          value={quickFormData.firstName}
-                          onChange={(e) => handleQuickFormChange('firstName', e.target.value)}
-                          required
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="quick-lastName">Last Name *</Label>
-                        <Input
-                          id="quick-lastName"
-                          placeholder="Smith"
-                          value={quickFormData.lastName}
-                          onChange={(e) => handleQuickFormChange('lastName', e.target.value)}
-                          required
-                        />
-                      </div>
-                    </div>
-                    
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <Label htmlFor="quick-recordNumber">Record Number *</Label>
-                        <Input
-                          id="quick-recordNumber"
-                          placeholder="P004"
-                          value={quickFormData.recordNumber}
-                          onChange={(e) => handleQuickFormChange('recordNumber', e.target.value)}
-                          required
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="quick-birthDate">Date of Birth *</Label>
-                        <Input
-                          id="quick-birthDate"
-                          type="date"
-                          value={quickFormData.birthDate}
-                          onChange={(e) => handleQuickFormChange('birthDate', e.target.value)}
-                          required
-                        />
-                      </div>
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label htmlFor="quick-severity">Parkinson's Severity *</Label>
-                      <Select value={quickFormData.severity} onValueChange={(value) => handleQuickFormChange('severity', value)}>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select severity level" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="Stage 1">Stage 1</SelectItem>
-                          <SelectItem value="Stage 2">Stage 2</SelectItem>
-                          <SelectItem value="Stage 3">Stage 3</SelectItem>
-                          <SelectItem value="Stage 4">Stage 4</SelectItem>
-                          <SelectItem value="Stage 5">Stage 5</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-
-                    <div className="flex justify-end">
-                      <Button variant="outline" onClick={() => setIsModalOpen(false)}>
-                        Close
-                      </Button>
-                    </div>
-                  </form>
-                </DialogContent>
-              </Dialog>
-
-              {/* Full Form Link */}
-              <Link to="/patient-form">
-                <Button className="bg-primary hover:bg-primary-hover text-primary-foreground">
-                  <Plus className="mr-2 h-4 w-4" />
-                  Detailed Form
-                </Button>
-              </Link>
+                </Link>
+              </div>
             </div>
           </div>
         </div>
