@@ -12,6 +12,7 @@ import VideoSummary from "./pages/VideoSummary";
 import NotFound from "./pages/NotFound";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
+import Home from "./pages/Home";
 
 const queryClient = new QueryClient();
 
@@ -22,7 +23,8 @@ const App = () => (
       <Sonner />
       <BrowserRouter>
         <Routes>
-          <Route path="/" element={<PatientList />} />
+          <Route path="/" element={<Home />} />
+          <Route path="/patients" element={<PatientList />} />
           <Route path="/patient/:id" element={<PatientDetails />} />
           <Route path="/patient-form" element={<PatientForm />} />
           <Route path="/patient-form/:id" element={<PatientForm />} />

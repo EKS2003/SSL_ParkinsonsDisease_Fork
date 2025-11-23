@@ -13,12 +13,14 @@ from patient_manager import (
     async_filter_patients,
 )
 
-from routes.contracts import (
+from schema.contracts import (
     PatientCreate, PatientUpdate,
     PatientResponse, PatientsListResponse,
     PatientSearchResponse, FilterCriteria,
     LabResultOut, DoctorNoteOut
 )
+
+from auth import get_current_user
 
 _num = re.compile(r"(\d+\.?\d*)")
 # Accept low/medium/high OR Stage 1..5
@@ -28,7 +30,7 @@ router = APIRouter(prefix="/patients")
 
 
 @router.post("/", response_model=Dict)
-async def create_patient(patient: PatientCreate):
+async def create_patient(patient: PatientCreate, current_user=Depends(get_current_user)):
     result = await async_create_patient(
         name=patient.name,
         age=patient.age,
@@ -38,6 +40,7 @@ async def create_patient(patient: PatientCreate):
         lab_results_history=patient.lab_results_history or "",
         doctors_notes_history=patient.doctors_notes_history or "",
         severity=patient.severity,
+        user_id= current_user.id
     )
 
     if not result or not result.get("success"):
@@ -50,20 +53,21 @@ async def create_patient(patient: PatientCreate):
 @router.get("/", response_model=PatientsListResponse)
 async def get_patients(
         skip: int = Query(0, ge=0),
-        limit: int = Query(100, ge=1, le=1000)
-):
-    return await async_get_all_patients_info(skip, limit)
+        limit: int = Query(100, ge=1, le=1000),
+        current_user=Depends(get_current_user)
+        ):
+    return await async_get_all_patients_info(skip, limit, user_id=current_user.id)
 
 @router.get("/{patient_id}", response_model=PatientResponse)
-async def get_patient(patient_id: str):
-    result = await async_get_patient_info(patient_id)
+async def get_patient(patient_id: str,  current_user=Depends(get_current_user)):
+    result = await async_get_patient_info(patient_id, user_id=current_user.id)
     if not result.get("success"):
         raise HTTPException(status_code=404, detail="Patient not found")
     return result["patient"]
 
 @router.put("/{patient_id}", response_model=Dict)
-async def update_patient(patient_id: str, patient_update: PatientUpdate):
-    result = await async_update_patient_info(patient_id, patient_update)
+async def update_patient(patient_id: str, patient_update: PatientUpdate, current_user=Depends(get_current_user)):
+    result = await async_update_patient_info(patient_id, patient_update, user_id=current_user.id)
     if not result.get("success"):
         if "errors" in result:
             raise HTTPException(status_code=400, detail=result["errors"])
@@ -71,8 +75,8 @@ async def update_patient(patient_id: str, patient_update: PatientUpdate):
     return result
 
 @router.delete("/{patient_id}", response_model=Dict)
-async def delete_patient(patient_id: str):
-    result = await async_delete_patient_record(patient_id)
+async def delete_patient(patient_id: str, current_user=Depends(get_current_user)):
+    result = await async_delete_patient_record(patient_id, user_id=current_user.id)
 
     if not result.get("success", False):
         raise HTTPException(status_code=404, detail="Patient not found")
@@ -80,9 +84,9 @@ async def delete_patient(patient_id: str):
     return result
 
 @router.get("/search/{query}", response_model=PatientSearchResponse)
-async def search_patients_endpoint(query: str):
-    return await async_search_patients(query)
+async def search_patients_endpoint(query: str, current_user=Depends(get_current_user)):
+    return await async_search_patients(query, user_id=current_user.id)
 
 @router.post("/filter/", response_model=PatientSearchResponse)
-async def filter_patients_endpoint(criteria: FilterCriteria):
-    return await async_filter_patients(criteria.dict(exclude_none=True))
+async def filter_patients_endpoint(criteria: FilterCriteria, current_user=Depends(get_current_user)):
+    return await async_filter_patients(criteria.dict(exclude_none=True), user_id=current_user.id)

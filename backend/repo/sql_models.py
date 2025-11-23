@@ -12,12 +12,16 @@ class User(Base):
     __tablename__ = "users"
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     username: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
-    full_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    first_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    last_name: Mapped[str] = mapped_column(String(255), nullable=False)
     email: Mapped[Optional[str]] = mapped_column(String(320), unique=True)
     hashed_password: Mapped[str] = mapped_column(String(255), nullable=False)
     location: Mapped[str] = mapped_column(String(255), nullable = False)
     title: Mapped[str] = mapped_column(String(255), nullable = False)
-    speciality: Mapped[str] = mapped_column(String(255), nullable = False)
+    speciality: Mapped[str] = mapped_column(String(255), nullable = False)  
+    department: Mapped[str] = mapped_column(String(255), nullable = False)
+
+
 
     # one user -> many patients
     patients: Mapped[List["Patient"]] = relationship(
@@ -98,21 +102,6 @@ if __name__ == "__main__":
     Base.metadata.create_all(engine)
     Session = sessionmaker(bind=engine, expire_on_commit=False)
 
-    # example
-    with Session() as s:
-        u = User(
-            username="doc_amy",
-            full_name="Dr. Amy",
-            email="amy@example.com",
-            hashed_password="***",
-            location="UF Health",
-            title="Neurologist",
-            speciality="Movement Disorders",
-        )
-        p = Patient(patient_id="P001", name="John Smith", user=u)  # assign owner
-        s.add_all([u, p])
-        s.commit()
-        # s.query(Patient).filter_by(user_id=u.id).all()
 
 
 

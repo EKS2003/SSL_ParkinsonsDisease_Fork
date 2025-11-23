@@ -263,10 +263,9 @@ const PatientDetails = () => {
   useEffect(() => {
     const fetchPatient = async () => {
       try {
-        const response = await fetch(`http://localhost:8000/patients/${id}`);
-        const data = await response.json();
-
-        if (!response.ok) {
+        const response = await apiService.getPatient(id!);
+        const data = response.data;
+        if (!response.success) {
           throw new Error(data.detail || "Failed to fetch patient");
         }
 
@@ -285,9 +284,10 @@ const PatientDetails = () => {
         console.log("Lab results history:", data?.lab_results_history);
         console.log("Doctor notes history:", data?.doctors_notes_history);
 
-        const [firstName, lastName] = data.name.split(" ");
 
-        const labResultsHistory = (data.lab_results_history || []).map(
+        const firstName = data.firstName;
+        const lastName = data.lastName;
+        const labResultsHistory = (data.labResultsHistory || []).map(
           (entry: any) => ({
             id: entry.id,
             date: new Date(entry.date),
@@ -296,7 +296,7 @@ const PatientDetails = () => {
           })
         );
 
-        const doctorNotesHistory = (data.doctors_notes_history || []).map(
+        const doctorNotesHistory = (data.doctorNotesHistory || []).map(
           (entry: any) => ({
             id: entry.id,
             date: new Date(entry.date),
@@ -305,14 +305,8 @@ const PatientDetails = () => {
           })
         );
 
-        const latestLabResult =
-          data.latest_lab_result ||
-          data.patient.lab_results_history?.[0] ||
-          null;
-        const latestDoctorNote =
-          data.latest_doctor_note ||
-          data.patient.doctors_notes_history?.[0] ||
-          null;
+        const latestLabResult = data.labresults;
+        const latestDoctorNote = data.doctorsnotes;
         const dateOnly = data.birthDate.split("T")[0];
 
         setPatient({

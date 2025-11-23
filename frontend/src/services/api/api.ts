@@ -11,6 +11,7 @@ import type {
   DtwSeriesMetrics,
 } from "@/types/dtw";
 // API service class
+
 class ApiService {
   private baseUrl: string;
 
@@ -58,13 +59,28 @@ class ApiService {
     try {
       const url = `${this.baseUrl}${endpoint}`;
 
+      // NEW: build headers, add JSON Content-Type & Authorization
+      const headers: HeadersInit = {
+        ...(options.headers || {}),
+      };
+
+      // Only force JSON if body is not FormData and user didn't set content-type
+      const hasContentType = Object.keys(headers).some(
+        (k) => k.toLowerCase() === "content-type"
+      );
+      if (options.body && !(options.body instanceof FormData) && !hasContentType) {
+        headers["Content-Type"] = "application/json";
+      }
+
+      if (this.accessToken) {
+        headers["Authorization"] = `Bearer ${this.accessToken}`;
+      }
+
       const response = await fetch(url, {
-        headers: {
-          "Content-Type": "application/json",
-          ...options.headers,
-        },
         ...options,
+        headers,
       });
+
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
@@ -108,6 +124,46 @@ class ApiService {
       };
     }
   }
+
+
+async login(username: string, password: string): Promise<boolean> {
+  const body = new URLSearchParams();
+  body.append("username", username);
+  body.append("password", password);
+
+  const res = await this.request<{ access_token: string }>("/login", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/x-www-form-urlencoded",
+    },
+    body,
+  });
+
+  if (res.success && res.data?.access_token) {
+    this.setToken(res.data.access_token);
+    return true;
+  }
+
+  return false;
+}
+
+async registerUser(payload: {
+  username: string;
+  first_name: string;
+  last_name: string;
+  email: string;
+  password: string;
+  location?: string;
+  title?: string;
+  department?: string;
+  speciality?: string;
+}): Promise<ApiResponse<any>> {
+  return this.request<any>("/signup", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
 
   // Get all patients
   async getPatients(

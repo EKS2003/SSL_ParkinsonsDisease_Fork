@@ -22,7 +22,7 @@ from uuid import uuid4
 from repo.sql_models import Base, Patient, LabResult, DoctorNote  # Visit, TestResult defined there as well
 from repo.patient_repository import PatientRepository
 from repo.test_repository import TestResultRepository
-from routes.contracts import (
+from schema.contracts import (
     PatientCreate, PatientUpdate,
     PatientResponse, PatientsListResponse,
     PatientSearchResponse, FilterCriteria,
@@ -176,6 +176,7 @@ def _patient_to_api_dict(session: Session, p: Patient) -> PatientResponse:
 def create_patient(
     name: str,
     age: int,
+    user_id: int,
     birthDate: Union[str, date],
     height: Optional[float],
     weight: Optional[float],
@@ -209,7 +210,7 @@ def create_patient(
 
             dbp = Patient(
                 patient_id=patient_id,
-                user_id=123,
+                user_id=user_id,
                 name=name,
                 dob=dob,
                 height=int(h) if h is not None else None,
@@ -242,19 +243,22 @@ def create_patient(
         return {"success": False, "error": str(e)}
 
 
-def get_patient_info(patient_id: str) -> Dict[str, Any]:
+def get_patient_info(patient_id: str, user_id: int) -> Dict[str, Any]:
     with SessionLocal() as session:
-        prepo = PatientRepository(session)
-        dbp = prepo.get(patient_id)
+        dbp = (
+            session.query(Patient)
+            .filter(Patient.patient_id == patient_id, Patient.user_id == user_id)
+            .first()
+        )
         if not dbp:
             return {"success": False, "error": "Patient not found"}
         return {"success": True, "patient": _patient_to_api_dict(session, dbp)}
 
-def get_all_patients_info(skip: int = 0, limit: int = 100) -> Dict[str, Any]:
-    with SessionLocal() as session:
-        prepo = PatientRepository(session)
-        rows = prepo.list(skip=skip, limit=limit)
-        total = prepo.count()
+def get_all_patients_info( user_id: int , skip: int = 0, limit: int = 100) -> Dict[str, Any]:
+   with SessionLocal() as session:
+        q = session.query(Patient).filter(Patient.user_id == user_id)
+        total = q.count()
+        rows = q.offset(skip).limit(limit).all()
         return {
             "success": True,
             "patients": [_patient_to_api_dict(session, r) for r in rows],
@@ -264,18 +268,7 @@ def get_all_patients_info(skip: int = 0, limit: int = 100) -> Dict[str, Any]:
         }
     
 
-def _extract_lab_result_value(v: Any) -> Optional[str]:
-    """Return only the textual value to persist into Visit.lab_result (Text)."""
-    if v is None:
-        return None
-    if isinstance(v, dict):
-        # Keep only the 'value' field if provided, otherwise stringify the dict
-        return v.get("value", str(v))
-    if isinstance(v, str):
-        return v
-    return str(v)
-
-def update_patient_info(patient_id: str, updated_data: PatientUpdate) -> Dict[str, Any]:
+def update_patient_info(patient_id: str, updated_data: PatientUpdate, user_id: int) -> Dict[str, Any]:
     # Turn model into a partial dict
     data = updated_data.model_dump(exclude_unset=True)
 
@@ -286,10 +279,14 @@ def update_patient_info(patient_id: str, updated_data: PatientUpdate) -> Dict[st
     with SessionLocal() as session:
         prepo = PatientRepository(session)
 
-        dbp = prepo.get(patient_id)
+        dbp = (
+            session.query(Patient)
+            .filter(Patient.patient_id == patient_id, Patient.user_id == user_id)
+            .first()
+        )
         if not dbp:
             return {"success": False, "error": "Patient not found"}
-
+        
         # --- Patch basic Patient columns ---
         if "name" in data:
             dbp.name = data["name"]
@@ -332,75 +329,74 @@ def update_patient_info(patient_id: str, updated_data: PatientUpdate) -> Dict[st
         session.commit()
         return {"success": True, "patient_id": patient_id}
 
-def delete_patient_record(patient_id: str) -> Dict[str, Any]:
+def delete_patient_record(patient_id: str, user_id: int) -> Dict[str, Any]:
     with SessionLocal() as session:
-        prepo = PatientRepository(session)
-        ok = prepo.delete(patient_id)
-        return {"success": ok} if ok else {"success": False, "error": "Patient not found"}
-
-def search_patients(query: str) -> Dict[str, Any]:
+        dbp = (
+            session.query(Patient)
+            .filter(Patient.patient_id == patient_id, Patient.user_id == user_id)
+            .first()
+        )
+        if not dbp:
+            return {"success": False, "error": "Patient not found"}
+        session.delete(dbp)
+        session.commit()
+        return {"success": True}
+    
+def search_patients(query: str, user_id: int) -> Dict[str, Any]:
     with SessionLocal() as session:
-        prepo = PatientRepository(session)
-        # If your repo has search_by_name, use it; otherwise emulate:
-        rows = prepo.filter(criteria=type("C", (), {"name": query, "min_age": None, "max_age": None})()) \
-               if hasattr(prepo, "filter") else prepo.list()
-        # If using .filter above returns List[Patient], keep it; otherwise, fallback name contains:
-        if not hasattr(prepo, "filter"):
-            rows = [p for p in rows if (p.name or "").lower().find(query.lower()) >= 0]
-        return {"success": True, "patients": [_patient_to_api_dict(session, r) for r in rows], "count": len(rows)}
-
-def filter_patients(criteria: Dict[str, Any]) -> Dict[str, Any]:
-    """
-    Supports: name, min_age, max_age, severity (severity via latest visit.vitals_json).
-    """
-    with SessionLocal() as session:
-        prepo = PatientRepository(session)
-
-        # If your repo exposes a richer filter, prefer it:
-        if hasattr(prepo, "filter_patients"):
-            rows = prepo.filter_patients(
-                name=criteria.get("name"),
-                min_age=criteria.get("min_age"),
-                max_age=criteria.get("max_age"),
-                severity=criteria.get("severity"),
-                skip=criteria.get("skip", 0),
-                limit=criteria.get("limit", 100),
+        q = (
+            session.query(Patient)
+            .filter(
+                Patient.user_id == user_id,
+                Patient.name.ilike(f"%{query}%"),
             )
-        else:
-            # Minimal fallback: list + name filter (age/severity omitted if repo lacks it)
-            rows = prepo.list(skip=criteria.get("skip", 0), limit=criteria.get("limit", 100))
-            if criteria.get("name"):
-                q = criteria["name"].lower()
-                rows = [p for p in rows if (p.name or "").lower().find(q) >= 0]
-
-
-
-        return {"success": True, "patients": [_patient_to_api_dict(session, r) for r in rows], "count": len(rows)}
+        )
+        rows = q.all()
+        return {
+            "success": True,
+            "patients": [_patient_to_api_dict(session, r) for r in rows],
+            "count": len(rows),
+        }
+    
+    
+def filter_patients(criteria: Dict[str, Any], user_id: int) -> Dict[str, Any]:
+    with SessionLocal() as session:
+        q = session.query(Patient).filter(Patient.user_id == user_id)
+        if criteria.get("name"):
+            q = q.filter(Patient.name.ilike(f"%{criteria['name']}%"))
+        # you can extend with severity / age filters later
+        rows = q.offset(criteria.get("skip", 0)).limit(criteria.get("limit", 100)).all()
+        return {
+            "success": True,
+            "patients": [_patient_to_api_dict(session, r) for r in rows],
+            "count": len(rows),
+        }
+    
 
 # ---------------- Async wrappers (same names) ----------------
 async def async_create_patient(*args, **kwargs) -> Dict[str, Any]:
     async with _async_lock:
         return create_patient(*args, **kwargs)
 
-async def async_get_patient_info(patient_id: str) -> Dict[str, Any]:
+async def async_get_patient_info(patient_id: str, user_id: int) -> Dict[str, Any]:
     async with _async_lock:
-        return get_patient_info(patient_id)
+        return get_patient_info(patient_id, user_id=user_id)
 
-async def async_get_all_patients_info(skip: int = 0, limit: int = 100) -> Dict[str, Any]:
+async def async_get_all_patients_info(skip: int = 0, limit: int = 100, user_id: int = None) -> Dict[str, Any]:
     async with _async_lock:
-        return get_all_patients_info(skip=skip, limit=limit)
+        return get_all_patients_info(skip=skip, limit=limit, user_id=user_id)
 
-async def async_update_patient_info(patient_id: str, updated_data: Dict[str, Any]) -> Dict[str, Any]:
+async def async_update_patient_info(patient_id: str, updated_data: Dict[str, Any], user_id:int) -> Dict[str, Any]:
     async with _async_lock:
-        return update_patient_info(patient_id, updated_data)
+        return update_patient_info(patient_id, updated_data, user_id = user_id)
 
-async def async_delete_patient_record(patient_id: str) -> Dict[str, Any]:
+async def async_delete_patient_record(patient_id: str, user_id: int) -> Dict[str, Any]:
     async with _async_lock:
-        return delete_patient_record(patient_id)
+        return delete_patient_record(patient_id, user_id=user_id)
 
-async def async_search_patients(query: str) -> Dict[str, Any]:
+async def async_search_patients(query: str, user_id: int) -> Dict[str, Any]:
     async with _async_lock:
-        return search_patients(query)
+        return search_patients(query, user_id=user_id)
 
 async def async_filter_patients(criteria: Dict[str, Any]) -> Dict[str, Any]:
     async with _async_lock:

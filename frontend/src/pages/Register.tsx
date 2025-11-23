@@ -6,6 +6,7 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2, Lock, Mail, Check, X} from 'lucide-react';
+import apiService from '@/services/api/api';
 
 const Register = () => {
   const navigate = useNavigate();
@@ -13,6 +14,7 @@ const Register = () => {
   //take all in as a string
   const [firstName, setFirstName] = useState(''); //combine to first and lat to make full name
   const [lastName, setLastName] = useState('');
+  const [username, setUsername] = useState('');           // NEW
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [location, setLocation] = useState('');
@@ -26,9 +28,22 @@ const Register = () => {
     setIsLoading(true);
 
     try {
-        //simulates a api call, need to send to backend
-        await new Promise((resolve) => resolve(1));
-        navigate('/patients');
+        const resp = await apiService.registerUser({
+            first_name: firstName,
+            last_name: lastName,
+            username: username,
+            email: email,
+            password: password,
+            location: location,
+            title: title,
+            department: department,
+            speciality: specialty,
+        })
+            if (resp.success) {
+                console.log('Registration successful');
+                await apiService.login(username, password);
+            }
+            navigate('/patients');
     } catch (error) {
         console.error('Login failed', error);
     } finally {
@@ -107,131 +122,145 @@ const Register = () => {
                 />
               </div>
             </div>
+
+            {/* NEW USERNAME FIELD */}
+            <div>
+              <Label htmlFor="username">Username</Label>
+              <Input
+                id="username"
+                type="text"
+                placeholder="drjohn"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                required
+              />
+            </div>
+
+            <div>
+              <Label htmlFor='email'>Email</Label>
+              <Input 
+                id="email"
+                type="email"
+                placeholder="doctor@hospital.com"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                required
+              />
+            </div>
+            <div className='space-y-2'>
               <div>
-                <Label htmlFor='email'>Email</Label>
+                <Label htmlFor='password'>Password</Label>
                 <Input 
-                  id="email"
-                  type="email"
-                  placeholder="doctor@hospital.com"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
+                  id="password"
+                  type="password"
+                  placeholder='••••••••'
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
                   required
                 />
-              </div>
-              <div className='space-y-2'>
-                <div>
-                  <Label htmlFor='password'>Password</Label>
-                  <Input 
-                    id="password"
-                    type="password"
-                    placeholder='••••••••'
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    required
-                  />
-                  {(
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="text-muted-foreground">Password strength:</span>
-                    <span className={`font-medium ${
-                      passwordStrength.strength >= 80 ? 'text-green-600' :
-                      passwordStrength.strength >= 60 ? 'text-blue-600' :
-                      passwordStrength.strength >= 40 ? 'text-yellow-600' :
-                      'text-red-600'
-                    }`}>
-                      {passwordStrength.label}
-                    </span>
+                {(
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-muted-foreground">Password strength:</span>
+                      <span className={`font-medium ${
+                        passwordStrength.strength >= 80 ? 'text-green-600' :
+                        passwordStrength.strength >= 60 ? 'text-blue-600' :
+                        passwordStrength.strength >= 40 ? 'text-yellow-600' :
+                        'text-red-600'
+                      }`}>
+                        {passwordStrength.label}
+                      </span>
+                    </div>
+                    <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
+                      <div 
+                        className={`h-full transition-all duration-300 ${passwordStrength.color}`}
+                        style={{ width: `${passwordStrength.strength}%` }}
+                      />
+                    </div>
+                    <div className="text-xs space-y-1 text-muted-foreground">
+                      <div className="flex items-center gap-1">
+                        {passwordStrength.checks.length ? 
+                          <Check className="h-3 w-3 text-green-600" /> : 
+                          <X className="h-3 w-3 text-red-600" />
+                        }
+                        <span>At least 8 characters</span>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        {passwordStrength.checks.uppercase ? 
+                          <Check className="h-3 w-3 text-green-600" /> : 
+                          <X className="h-3 w-3 text-red-600" />
+                        }
+                        <span>One uppercase letter</span>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        {passwordStrength.checks.lowercase ? 
+                          <Check className="h-3 w-3 text-green-600" /> : 
+                          <X className="h-3 w-3 text-red-600" />
+                        }
+                        <span>One lowercase letter</span>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        {passwordStrength.checks.number ? 
+                          <Check className="h-3 w-3 text-green-600" /> : 
+                          <X className="h-3 w-3 text-red-600" />
+                        }
+                        <span>One number</span>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        {passwordStrength.checks.special ? 
+                          <Check className="h-3 w-3 text-green-600" /> : 
+                          <X className="h-3 w-3 text-red-600" />
+                        }
+                        <span>One special character (!@#$%&*?)</span>
+                      </div>
+                    </div>
                   </div>
-                  <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
-                    <div 
-                      className={`h-full transition-all duration-300 ${passwordStrength.color}`}
-                      style={{ width: `${passwordStrength.strength}%` }}
-                    />
-                  </div>
-                  <div className="text-xs space-y-1 text-muted-foreground">
-                    <div className="flex items-center gap-1">
-                      {passwordStrength.checks.length ? 
-                        <Check className="h-3 w-3 text-green-600" /> : 
-                        <X className="h-3 w-3 text-red-600" />
-                      }
-                      <span>At least 8 characters</span>
-                    </div>
-                    <div className="flex items-center gap-1">
-                      {passwordStrength.checks.uppercase ? 
-                        <Check className="h-3 w-3 text-green-600" /> : 
-                        <X className="h-3 w-3 text-red-600" />
-                      }
-                      <span>One uppercase letter</span>
-                    </div>
-                    <div className="flex items-center gap-1">
-                      {passwordStrength.checks.lowercase ? 
-                        <Check className="h-3 w-3 text-green-600" /> : 
-                        <X className="h-3 w-3 text-red-600" />
-                      }
-                      <span>One lowercase letter</span>
-                    </div>
-                    <div className="flex items-center gap-1">
-                      {passwordStrength.checks.number ? 
-                        <Check className="h-3 w-3 text-green-600" /> : 
-                        <X className="h-3 w-3 text-red-600" />
-                      }
-                      <span>One number</span>
-                    </div>
-                    <div className="flex items-center gap-1">
-                      {passwordStrength.checks.special ? 
-                        <Check className="h-3 w-3 text-green-600" /> : 
-                        <X className="h-3 w-3 text-red-600" />
-                      }
-                      <span>One special character (!@#$%&*?)</span>
-                    </div>
-                  </div>
-                </div>
-              )}
-                </div>
+                )}
               </div>
-              <div>
-                <Label htmlFor='department'>Department</Label>
-                <Input 
-                  id="department"
-                  type="text"
-                  placeholder="Neurology"
-                  value={department}
-                  onChange={(e) => setDepartment(e.target.value)}
-                  required
-                />
-              </div>
-              <div>
-                <Label htmlFor='speciality'>Speciality</Label>
-                <Input 
-                  id="speciality"
-                  type="text"
-                  placeholder='Brain Disorders'
-                  value = {specialty}
-                  onChange={(e) => setSpecialty(e.target.value)}
-                  required
-                />
-              </div>
-              <div>
-                <Label htmlFor='title'>Title</Label>
-                <Input 
-                  id="title"
-                  type="text"
-                  placeholder="MD, PhD"
-                  value={title}
-                  onChange={(e) => setTitle(e.target.value)}
-                  required
-                />
-              </div>
-              <div>
-                <Label htmlFor='location'>Location</Label>
-                <Input 
-                  id="location"
-                  type="text"
-                  placeholder="Boston, MA"
-                  value={location}
-                  onChange={(e) => setLocation(e.target.value)}
-                />
-              </div>
+            </div>
+            <div>
+              <Label htmlFor='department'>Department</Label>
+              <Input 
+                id="department"
+                type="text"
+                placeholder="Neurology"
+                value={department}
+                onChange={(e) => setDepartment(e.target.value)}
+                required
+              />
+            </div>
+            <div>
+              <Label htmlFor='speciality'>Speciality</Label>
+              <Input 
+                id="speciality"
+                type="text"
+                placeholder='Brain Disorders'
+                value = {specialty}
+                onChange={(e) => setSpecialty(e.target.value)}
+                required
+              />
+            </div>
+            <div>
+              <Label htmlFor='title'>Title</Label>
+              <Input 
+                id="title"
+                type="text"
+                placeholder="MD, PhD"
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                required
+              />
+            </div>
+            <div>
+              <Label htmlFor='location'>Location</Label>
+              <Input 
+                id="location"
+                type="text"
+                placeholder="Boston, MA"
+                value={location}
+                onChange={(e) => setLocation(e.target.value)}
+              />
+            </div>
             <Button type="submit" disabled={isLoading} className="w-full">
               {isLoading ? (
                 <Loader2 className="animate-spin" />

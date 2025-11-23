@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, Query, UploadFile, File, Form, Body, WebSocket, WebSocketDisconnect, Depends
+from fastapi import FastAPI, HTTPException, Query, UploadFile, File, Form, Body, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from typing import Dict, List, Optional, Annotated
@@ -6,6 +6,7 @@ from datetime import datetime, timedelta
 import os
 import shutil
 import uvicorn
+from sqlalchemy.exc import IntegrityError
 
 from routes.dtw_rest import router as dtw_router
 from routes.patient import router as patient_router
@@ -16,6 +17,9 @@ from repo.db import engine
 from jose import jwt, JWTError
 from passlib.context import CryptContext
 from patient_manager import SessionLocal
+from schema.user import UserSignup
+from auth import authenticate, create_access_token, pwd
+
 
 # ============ Paths / Folders ============
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -56,51 +60,78 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-SECRET_KEY = "stupid_hash_for_now"
-ALGO = "HS256"
-ACCESS_MIN = 30
 
-pwd = CryptContext(schemes=["bcrypt"], deprecated="auto")
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
 
-def authenticate(username: str, password: str) -> User | None:
-    try:
-        with SessionLocal() as session:
-            user = session.query(User).filter_by(username=username).first()
-            if user and pwd.verify(password, user.hashed_password):
-                return user
-    except Exception as e:
-        return {"error": "Failed to auth"}
+
+
     
-def create_access_token(sub: str) -> str:
-    to_encode = {
-        "sub": sub, 
-        "exp": datetime.now() + timedelta(minutes=ACCESS_MIN)
-    }
-    return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGO)
-
-async def get_current_user(token: str = Depends(oauth2_scheme)) -> User:
-    try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGO])
-        username: str = payload.get("sub")
-        if username is None:
-            raise HTTPException(status_code=401, detail="Invalid authentication credentials")
-    except JWTError:
-        raise HTTPException(status_code=401, detail="Invalid authentication credentials")   
-    with SessionLocal() as session:
-        user = session.query(User).filter_by(username=username).first()
-        if user is None:
-            raise HTTPException(status_code=401, detail="Invalid authentication credentials")
-        return user
-    
-@app.post("/token")
+@app.post("/login")
 async def login(form: OAuth2PasswordRequestForm = Depends()):
     user = authenticate(form.username, form.password)
     if not user:
         raise HTTPException(status_code=401, detail="Incorrect username or password")
-    access_token = create_access_token(sub=user.username)
-    return {"access_token": access_token, "token_type": "bearer"}
+    token = create_access_token(sub=user.username)
+    return {"access_token": token, "token_type": "bearer"}
 
+
+@app.post("/signup", status_code=201)
+async def signup(user_in: UserSignup):
+    """
+    Create a new user account and return a JWT so the frontend can log in immediately.
+    """
+    with SessionLocal() as session:
+        # Check for existing username / email
+        existing = (
+            session.query(User)
+            .filter(
+                (User.username == user_in.username) |
+                (User.email == user_in.email)
+            )
+            .first()
+        )
+        if existing:
+            raise HTTPException(
+                status_code=400,
+                detail="Username or email already registered."
+            )
+
+        # Hash password and create user
+        hashed_pw = pwd.hash(user_in.password)
+        user = User(
+            username=user_in.username,
+            first_name=user_in.first_name,
+            last_name=user_in.last_name,
+            email=user_in.email,
+            hashed_password=hashed_pw,
+            location=user_in.location,
+            title=user_in.title,
+            speciality=user_in.speciality,
+            department=user_in.department,
+        )
+
+        session.add(user)
+        try:
+            session.commit()
+        except IntegrityError:
+            session.rollback()
+            # In case of a race condition on unique constraints
+            raise HTTPException(
+                status_code=400,
+                detail="Username or email already registered."
+            )
+
+        session.refresh(user)
+
+    # Optional: immediately issue an access token like /token does
+    access_token = create_access_token(sub=user.username)
+    return {
+        "ok": True,
+        "id": user.id,
+        "username": user.username,
+        "email": user.email,
+        "access_token": access_token,
+        "token_type": "bearer",
+    }
 # ============ REST: Health & Patients ============
 @app.get("/")
 async def root():

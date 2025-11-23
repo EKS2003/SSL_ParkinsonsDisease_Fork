@@ -6,11 +6,12 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2, Lock, Mail } from 'lucide-react';
+import apiService from '@/services/api/api';
 
 const Login = () => {
   const navigate = useNavigate();
 
-  const [email, setEmail] = useState('');
+  const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
@@ -20,7 +21,12 @@ const Login = () => {
 
     try {
         //simulates a api call, need to send to backend
-        await new Promise((resolve) => resolve(1));
+      const ok = await apiService.login(username, password);
+      if (!ok) {
+        console.error("Login failed");
+        // show toast, error message, etc.
+        return;
+      }
         navigate('/patients');
     } catch (error) {
         console.error('Login failed', error);
@@ -40,12 +46,12 @@ const Login = () => {
           <form onSubmit={handleSubmit} className='space-y-4'>
             <div className="space-y-4">
               <div>
-                <Label htmlFor="email">Email</Label>
+                <Label htmlFor="email">Username</Label>
                 <Input
-                  id="email"
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
+                  id="username"
+                  type="username"
+                  value={username}
+                  onChange={(e) => setUsername(e.target.value)}
                   required
                 />
               </div>
