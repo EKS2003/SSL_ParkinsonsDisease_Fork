@@ -1,8 +1,18 @@
-import { AVAILABLE_TESTS, Test, TestIndicator } from '@/types/patient';
-import { API_BASE_URL } from './mappers/testMapper';
-import { ApiResponse , BackendPatient,BackendPatientUpdate,BackendTestEntry} from '@/types/backend_types';
-import {normalizeBirthDate, calculateAge, convertBackendTestToFrontend, convertBackendToFrontend, convertFrontendToBackend } from './mappers/testMapper';
-import { LabResultEntry, DoctorNoteEntry , PatientUpdateResponse} from '@/types/patient';
+import { Test } from "@/types/patient";
+import { API_BASE_URL } from "./mappers/testMapper";
+import {
+  ApiResponse,
+  BackendPatient,
+  BackendPatientUpdate,
+  BackendTestEntry,
+} from "@/types/backend_types";
+import {
+  normalizeBirthDate,
+  calculateAge,
+  convertBackendTestToFrontend,
+  convertBackendToFrontend,
+  convertFrontendToBackend,
+} from "./mappers/testMapper";
 
 import type {
   AxisAggResponse,
@@ -15,27 +25,27 @@ import type {
 class ApiService {
   private baseUrl: string;
 
-  private tokenKey = "auth_token"
+  private tokenKey = "auth_token";
   private accessToken: string | null;
 
   constructor(baseUrl: string = API_BASE_URL) {
     this.baseUrl = baseUrl;
 
     //Basically checks if window is fine. Tries to also check if there is a token
-    if (typeof window !== "undefined"){
+    if (typeof window !== "undefined") {
       this.accessToken = window.localStorage.getItem(this.tokenKey);
     } else {
       this.accessToken = null;
-      }
+    }
   }
 
-  private setToken(token: string | null){
-    this.accessToken = token
-    if(typeof window !== "undefined"){
-      if(token){
+  private setToken(token: string | null) {
+    this.accessToken = token;
+    if (typeof window !== "undefined") {
+      if (token) {
         window.localStorage.setItem(this.tokenKey, token);
-      } else{
-          window.localStorage.removeItem(this.tokenKey);
+      } else {
+        window.localStorage.removeItem(this.tokenKey);
       }
     }
   }
@@ -51,7 +61,7 @@ class ApiService {
   public logout() {
     this.setToken(null);
   }
-  
+
   private async request<T>(
     endpoint: string,
     options: RequestInit = {}
@@ -68,7 +78,11 @@ class ApiService {
       const hasContentType = Object.keys(headers).some(
         (k) => k.toLowerCase() === "content-type"
       );
-      if (options.body && !(options.body instanceof FormData) && !hasContentType) {
+      if (
+        options.body &&
+        !(options.body instanceof FormData) &&
+        !hasContentType
+      ) {
         headers["Content-Type"] = "application/json";
       }
 
@@ -81,6 +95,11 @@ class ApiService {
         headers,
       });
 
+      if (response.status === 401) {
+        this.logout(); // clears token + localStorage
+        window.location.href = "/login"; // hard redirect to login
+        return { success: false, error: "Unauthorized" };
+      }
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
@@ -125,45 +144,43 @@ class ApiService {
     }
   }
 
+  async login(username: string, password: string): Promise<boolean> {
+    const body = new URLSearchParams();
+    body.append("username", username);
+    body.append("password", password);
 
-async login(username: string, password: string): Promise<boolean> {
-  const body = new URLSearchParams();
-  body.append("username", username);
-  body.append("password", password);
+    const res = await this.request<{ access_token: string }>("/login", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+      },
+      body,
+    });
 
-  const res = await this.request<{ access_token: string }>("/login", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/x-www-form-urlencoded",
-    },
-    body,
-  });
+    if (res.success && res.data?.access_token) {
+      this.setToken(res.data.access_token);
+      return true;
+    }
 
-  if (res.success && res.data?.access_token) {
-    this.setToken(res.data.access_token);
-    return true;
+    return false;
   }
 
-  return false;
-}
-
-async registerUser(payload: {
-  username: string;
-  first_name: string;
-  last_name: string;
-  email: string;
-  password: string;
-  location?: string;
-  title?: string;
-  department?: string;
-  speciality?: string;
-}): Promise<ApiResponse<any>> {
-  return this.request<any>("/signup", {
-    method: "POST",
-    body: JSON.stringify(payload),
-  });
-}
-
+  async registerUser(payload: {
+    username: string;
+    first_name: string;
+    last_name: string;
+    email: string;
+    password: string;
+    location?: string;
+    title?: string;
+    department?: string;
+    speciality?: string;
+  }): Promise<ApiResponse<any>> {
+    return this.request<any>("/signup", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  }
 
   // Get all patients
   async getPatients(
@@ -234,13 +251,13 @@ async registerUser(payload: {
       }`.trim();
       backendData.name = fullName;
     }
-    
+
     if (updateData.birthDate !== undefined) {
       const normalized = normalizeBirthDate(updateData.birthDate);
       backendData.birthDate = normalized || updateData.birthDate;
       backendData.age = calculateAge(normalized || updateData.birthDate); // Use your existing function
     }
-    
+
     if (updateData.height) {
       const heightStr = updateData.height.replace(/[^\d.]/g, "");
       backendData.height = heightStr || "0";
@@ -252,39 +269,55 @@ async registerUser(payload: {
     const ensureISODate = (value: any): string => {
       if (value instanceof Date) return value.toISOString();
       const parsed = new Date(value);
-      return Number.isNaN(parsed.getTime()) ? new Date().toISOString() : parsed.toISOString();
+      return Number.isNaN(parsed.getTime())
+        ? new Date().toISOString()
+        : parsed.toISOString();
     };
 
     if (updateData.labResultsHistory) {
-      backendData.lab_results_history = updateData.labResultsHistory.map((entry: any) => ({
-        id: entry.id,
-        date: ensureISODate(entry.date),
-        results: entry.results,
-        added_by: entry.addedBy,
-      }));
-    } else if (typeof updateData.labResults === 'string' && updateData.labResults.trim()) {
-      backendData.lab_results_history = [{
-        id: `lab_${Date.now()}`,
-        date: new Date().toISOString(),
-        results: updateData.labResults.trim(),
-        added_by: updateData.primaryPhysician || 'Unknown',
-      }];
+      backendData.lab_results_history = updateData.labResultsHistory.map(
+        (entry: any) => ({
+          id: entry.id,
+          date: ensureISODate(entry.date),
+          results: entry.results,
+          added_by: entry.addedBy,
+        })
+      );
+    } else if (
+      typeof updateData.labResults === "string" &&
+      updateData.labResults.trim()
+    ) {
+      backendData.lab_results_history = [
+        {
+          id: `lab_${Date.now()}`,
+          date: new Date().toISOString(),
+          results: updateData.labResults.trim(),
+          added_by: updateData.primaryPhysician || "Unknown",
+        },
+      ];
     }
 
     if (updateData.doctorNotesHistory) {
-      backendData.doctors_notes_history = updateData.doctorNotesHistory.map((entry: any) => ({
-        id: entry.id,
-        date: ensureISODate(entry.date),
-        note: entry.note,
-        added_by: entry.addedBy,
-      }));
-    } else if (typeof updateData.doctorNotes === 'string' && updateData.doctorNotes.trim()) {
-      backendData.doctors_notes_history = [{
-        id: `note_${Date.now()}`,
-        date: new Date().toISOString(),
-        note: updateData.doctorNotes.trim(),
-        added_by: updateData.primaryPhysician || 'Unknown',
-      }];
+      backendData.doctors_notes_history = updateData.doctorNotesHistory.map(
+        (entry: any) => ({
+          id: entry.id,
+          date: ensureISODate(entry.date),
+          note: entry.note,
+          added_by: entry.addedBy,
+        })
+      );
+    } else if (
+      typeof updateData.doctorNotes === "string" &&
+      updateData.doctorNotes.trim()
+    ) {
+      backendData.doctors_notes_history = [
+        {
+          id: `note_${Date.now()}`,
+          date: new Date().toISOString(),
+          note: updateData.doctorNotes.trim(),
+          added_by: updateData.primaryPhysician || "Unknown",
+        },
+      ];
     }
     if (updateData.severity) {
       const mappedSeverity = updateData.severity;
@@ -297,16 +330,14 @@ async registerUser(payload: {
       backendData.severity = mappedSeverity;
     }
 
-            console.log('Backend update data:', backendData);
-        console.log('Data types:', {
-          name: typeof backendData.name,
-          birthDate: typeof backendData.birthDate,
-          height: typeof backendData.height,
-          weight: typeof backendData.weight,
-          severity: typeof backendData.severity
-        });
-
-
+    console.log("Backend update data:", backendData);
+    console.log("Data types:", {
+      name: typeof backendData.name,
+      birthDate: typeof backendData.birthDate,
+      height: typeof backendData.height,
+      weight: typeof backendData.weight,
+      severity: typeof backendData.severity,
+    });
 
     const response = await this.request<BackendPatient>(
       `/patients/${patientId}`,
@@ -380,11 +411,11 @@ async registerUser(payload: {
     return { success: false, error: response.error };
   }
 
- async addLabResult(
+  async addLabResult(
     patientId: string,
     lab: {
       id: string;
-      date: string;              // ISO string, e.g. toLocalISO()
+      date: string; // ISO string, e.g. toLocalISO()
       added_by: string | null;
       results: string;
     }
@@ -401,7 +432,7 @@ async registerUser(payload: {
     patientId: string,
     note: {
       id: string;
-      date: string;              // ISO string, e.g. toLocalISO()
+      date: string; // ISO string, e.g. toLocalISO()
       note: string;
       added_by: string | null;
     }
@@ -416,16 +447,18 @@ async registerUser(payload: {
 
   // Get test history for a patient
   async getPatientTests(patientId: string): Promise<ApiResponse<Test[]>> {
-    const response = await this.request<{ tests: BackendTestEntry[] } | BackendTestEntry[]>(
-      `/patients/${patientId}/tests`
-    );
+    const response = await this.request<
+      { tests: BackendTestEntry[] } | BackendTestEntry[]
+    >(`/patients/${patientId}/tests`);
 
     if (response.success && response.data) {
       const payload = response.data;
       const testsRaw = Array.isArray(payload) ? payload : payload.tests ?? [];
       const converted = testsRaw
         .filter(Boolean)
-        .map((entry) => convertBackendTestToFrontend(patientId, entry as BackendTestEntry));
+        .map((entry) =>
+          convertBackendTestToFrontend(patientId, entry as BackendTestEntry)
+        );
       converted.sort((a, b) => b.date.getTime() - a.date.getTime());
       return { success: true, data: converted };
     }
@@ -522,9 +555,9 @@ async registerUser(payload: {
       `&max_points=${maxPoints}`;
 
     const res = await this.request<AxisAggResponse>(
-      `/dtw/sessions/${encodeURIComponent(
-        testKey
-      )}/${encodeURIComponent(sessionId)}/axis_agg${query}`,
+      `/dtw/sessions/${encodeURIComponent(testKey)}/${encodeURIComponent(
+        sessionId
+      )}/axis_agg${query}`,
       { signal }
     );
     if (!res.success || !res.data) {
@@ -554,9 +587,9 @@ async registerUser(payload: {
     signal?: AbortSignal
   ): Promise<{ npz: string; meta: string }> {
     const res = await this.request<{ npz: string; meta: string }>(
-      `/dtw/sessions/${encodeURIComponent(
-        testKey
-      )}/${encodeURIComponent(sessionId)}/download`,
+      `/dtw/sessions/${encodeURIComponent(testKey)}/${encodeURIComponent(
+        sessionId
+      )}/download`,
       { signal }
     );
     if (!res.success || !res.data) {
