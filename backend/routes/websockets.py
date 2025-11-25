@@ -13,8 +13,9 @@ from typing import List, Optional, Dict
 from routes.utils_dtw import EndOnlyDTW, normalize_test_name
 
 from patient_manager import (
-    TestHistoryManager
+    SessionLocal,
 )
+from repo.sql_models import TestResult
 from fastapi import APIRouter
 
 router = APIRouter(prefix="/ws", tags=["websockets"])
@@ -57,16 +58,14 @@ def _decode_base64_image(data_str: str) -> np.ndarray:
         raise ValueError("Could not decode frame from provided data.")
     return frame
 
-def _save_frames_to_mp4(frames: List[np.ndarray], fps: float = 30.0) -> str:
+def _save_frames_to_mp4(test_id: str ,frames: List[np.ndarray], fps: float = 30.0) -> str:
     if not frames:
         raise ValueError("No frames to save.")
 
     cv2 = _cv2()
     h, w = frames[0].shape[:2]
 
-    recording_id = str(uuid.uuid4())
-    ts = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-    filename = f"ws_recording_{ts}_{recording_id}.mp4"
+    filename = f"ws_recording_{test_id}.mp4"
     path = os.path.join(RECORDINGS_DIR, filename)
 
     # Try H.264 first, fall back to mp4v if unavailable
@@ -235,46 +234,86 @@ async def _camera_ws_handler(websocket: WebSocket):
                     await websocket.send_json({"type": "error", "where": "end", "message": "DTW not initialized"})
                     continue
 
-                # Finalize DTW (returns ok=False with details if it couldn't save)
-                payload = dtw_end.finalize_and_save(meta_sidecar={"patientId": patient_id, "fps": fps_hint})
-                if not payload.get("ok"):
+                # 1) Compute DTW (no disk)
+                dtw_payload = dtw_end.finalize_and_save(
+                    meta_sidecar={"patientId": patient_id, "fps": fps_hint}
+                )
+                if not dtw_payload.get("ok"):
                     await websocket.send_json({
                         "type": "dtw_error",
-                        **payload,
+                        **dtw_payload,
                         "testName": test_name,
                         "model": model,
                     })
-                else:
-                    await websocket.send_json({"type": "dtw_saved", **payload})
+                    continue
 
-                # Save MP4 & history (optional)
+                # 2) Save MP4 recording
                 try:
-                    saved_name = _save_frames_to_mp4(frames, fps=fps_hint)
+                    saved_name = _save_frames_to_mp4(test_id, frames, fps=fps_hint)
                 except Exception as e:
                     await websocket.send_json({"type": "error", "where": "save_mp4", "message": f"{e}"})
                     frames = []
                     continue
 
+                # 3) Persist DTW run + video into TestResult
                 try:
-                    thm = TestHistoryManager()
-                    thm.add_patient_test(patient_id or "unknown", {
-                        "test_name": test_name or "unknown",
-                        "date": datetime.utcnow().isoformat(),
-                        "recording_file": saved_name,
-                        "frame_count": len(frames)
-                    })
-                except Exception:
-                    pass
+                    with SessionLocal() as db:
+                        tr = TestResult(
+                            test_id=test_id,
+                            patient_id=patient_id or "unknown",
+                            test_name=test_name or "unknown",
+                            test_date=datetime.utcnow(),
+                            model=model,
+                            fps=fps_hint,
+                            recording_file=saved_name,
+                            frame_count=len(frames),
 
-                await websocket.send_json({
-                    "type": "complete",
-                    "recording": saved_name,
-                    "path": f"recordings/{saved_name}",
-                    "frame_count": len(frames),
-                    "patientId": patient_id,
-                    "testName": test_name
-                })
+                            similarity_overall=dtw_payload["similarity_overall"],
+                            similarity_pos=dtw_payload["similarity_pos"],
+                            similarity_amp=dtw_payload["similarity_amp"],
+                            similarity_spd=dtw_payload["similarity_spd"],
+                            distance_pos=dtw_payload["pos_dtw"],
+                            distance_amp=dtw_payload["amp_dtw"],
+                            distance_spd=dtw_payload["spd_dtw"],
+                            avg_step_pos=dtw_payload["avg_step_pos"],
+                            R_pos=dtw_payload["R_pos"],
+                            R_amp=dtw_payload["R_amp"],
+                            R_spd=dtw_payload["R_spd"],
+                            L_pos=dtw_payload["L_pos"],
+                            L_amp=dtw_payload["L_amp"],
+                            L_spd=dtw_payload["L_spd"],
+
+                            pos_local_costs={"values": dtw_payload["pos_local_costs"]},
+                            pos_aligned_ref_by_live={"indices": dtw_payload["pos_aligned_ref_by_live"]},
+                            amp_local_costs={"values": dtw_payload["amp_local_costs"]},
+                            amp_aligned_ref_by_live={"indices": dtw_payload["amp_aligned_ref_by_live"]},
+                            spd_local_costs={"values": dtw_payload["spd_local_costs"]},
+                            spd_aligned_ref_by_live={"indices": dtw_payload["spd_aligned_ref_by_live"]},
+                        )
+                        db.add(tr)
+                        db.commit()
+                        db.refresh(tr)
+
+                    # 4) Tell frontend everything is done
+                    await websocket.send_json({
+                        "type": "complete",
+                        "testResultId": tr.test_id,
+                        "patientId": patient_id,
+                        "testName": test_name,
+                        "model": model,
+                        "recording": saved_name,
+                        "path": f"recordings/{saved_name}",
+                        "frame_count": len(frames),
+                        "similarity_overall": tr.similarity_overall,
+                        "similarity_pos": tr.similarity_pos,
+                        "similarity_amp": tr.similarity_amp,
+                        "similarity_spd": tr.similarity_spd,
+                    })
+                except Exception as e:
+                    await websocket.send_json({"type": "error", "where": "sql_save", "message": f"{e}"})
+
                 frames = []
+
 
             else:
                 await websocket.send_json({"type": "error", "message": f"Unknown message: {data}"})

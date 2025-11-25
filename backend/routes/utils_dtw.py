@@ -280,8 +280,11 @@ class EndOnlyDTW:
         else:
             self._pushed_drops += 1
 
-    #Changing this to return save speed dtw, amplitude, and positional dtw
     def finalize_and_save(self, meta_sidecar: Dict) -> Dict:
+        """
+        Now: only computes DTW and returns a payload ready to be stored in SQL.
+        No more filesystem / NPZ saving.
+        """
         if self.init_error:
             return {"ok": False, "where": "init", "message": self.init_error}
 
@@ -306,13 +309,12 @@ class EndOnlyDTW:
             }
 
         # ---------- AMPLITUDE ----------
-        AX = calculate_amplitude(X)  # (T_live,)
-        AY = calculate_amplitude(Y)  # (T_ref,)
+        AX = calculate_amplitude(X)
+        AY = calculate_amplitude(Y)
 
         amp_path, amp_total = _dtw_with_optional_sakoe(AX, AY, self.sakoe_radius)
         R_amp = float(AY.max() - AY.min())
         L_amp = 0.5 * (len(AX) + len(AY))
-
         S_amp = amp_total
 
         amp_local_costs = np.fromiter(
@@ -325,8 +327,8 @@ class EndOnlyDTW:
             amp_aligned_ref_by_live[i] = j
 
         # ---------- SPEED ----------
-        SX = calculate_speed(X)  # (T_live-1,)
-        SY = calculate_speed(Y)  # (T_ref-1,)
+        SX = calculate_speed(X)
+        SY = calculate_speed(Y)
 
         if len(SX) > 0 and len(SY) > 0:
             s_path, s_total = _dtw_with_optional_sakoe(SX, SY, self.sakoe_radius)
@@ -362,62 +364,34 @@ class EndOnlyDTW:
 
         R_pos = float((Y.max(axis=0) - Y.min(axis=0)).max())
         L_pos = 0.5 * (len(X) + len(Y))
-
         S_pos = pos_total
 
-        # ---------- COMBINED SCORE ----------
+        # ---------- COMBINED ----------
         S_overall = (S_pos + S_amp + S_spd) / 3.0
         avg_step_pos = float(pos_total / max(1, len(pos_path)))
 
-        save_dtw_npz(
-            save_root=None,
-            test_name=self.test_name,
-            test_id=self.test_id,
-            model=self.model,
-            X_live=X,
-            Y_ref=Y,
-            AX_live=AX,
-            AY_ref=AY,
-            SX_live=SX,
-            SY_ref=SY,
-            pos_path_pairs=pos_path,
-            pos_local_costs=pos_local_costs,
-            pos_aligned_ref_by_live=pos_aligned_ref_by_live,
-            amp_path_pairs=amp_path,
-            amp_local_costs=amp_local_costs,
-            amp_aligned_ref_by_live=amp_aligned_ref_by_live,
-            spd_path_pairs=s_path,
-            spd_local_costs=spd_local_costs,
-            spd_aligned_ref_by_live=spd_aligned_ref_by_live,
-            meta={
-                "pos_dtw": pos_total,
-                "amp_dtw": amp_total,
-                "spd_dtw": s_total,
-                "R_pos": R_pos,
-                "R_amp": R_amp,
-                "R_spd": R_spd,
-                "L_pos": L_pos,
-                "L_amp": L_amp,
-                "L_spd": L_spd,
-                "similarity_pos": S_pos,
-                "similarity_amp": S_amp,
-                "similarity_spd": S_spd,
-                "similarity_overall": S_overall,
-                "avg_step_pos": avg_step_pos,
-                **meta_sidecar,
-            },
-        )
-
-        print(
-            f"[DTW] ok save | test={self.test_name} model={self.model} "
-            f"frames={self._pushed_frames} feats={self._pushed_feats} "
-            f"path_len={len(pos_path)} S_overall={S_overall:.4f}"
-        )
-
+        # Convert arrays to JSON-serializable lists
         return {
             "ok": True,
-            "similarity_overall": S_overall,
-            "similarity_pos": S_pos,
-            "similarity_amp": S_amp,
-            "similarity_spd": S_spd,
+            "similarity_overall": float(S_overall),
+            "similarity_pos": float(S_pos),
+            "similarity_amp": float(S_amp),
+            "similarity_spd": float(S_spd),
+            "pos_dtw": float(pos_total),
+            "amp_dtw": float(amp_total),
+            "spd_dtw": float(s_total),
+            "R_pos": float(R_pos),
+            "R_amp": float(R_amp),
+            "R_spd": float(R_spd),
+            "L_pos": float(L_pos),
+            "L_amp": float(L_amp),
+            "L_spd": float(L_spd),
+            "avg_step_pos": avg_step_pos,
+            "pos_local_costs": pos_local_costs.astype(float).tolist(),
+            "pos_aligned_ref_by_live": pos_aligned_ref_by_live.astype(int).tolist(),
+            "amp_local_costs": amp_local_costs.astype(float).tolist(),
+            "amp_aligned_ref_by_live": amp_aligned_ref_by_live.astype(int).tolist(),
+            "spd_local_costs": spd_local_costs.astype(float).tolist(),
+            "spd_aligned_ref_by_live": spd_aligned_ref_by_live.astype(int).tolist(),
+            **meta_sidecar,
         }

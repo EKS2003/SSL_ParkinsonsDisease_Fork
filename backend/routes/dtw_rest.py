@@ -1,442 +1,441 @@
 # backend/routes/dtw_rest.py
 from __future__ import annotations
-from typing import List, Dict, Any, Tuple, Optional
-from pathlib import Path
-import json
-import numpy as np
-from fastapi import APIRouter, HTTPException, Query
 
+from typing import List, Dict, Any, Optional
+from datetime import datetime
+import os
+
+from fastapi import APIRouter, HTTPException, Query, Depends
+from fastapi.responses import FileResponse
+
+from sqlalchemy.orm import Session as OrmSession
+from sqlalchemy import func
+
+from repo.sql_models import TestResult
+from patient_manager import SessionLocal as DBSession
+from auth import get_current_user
 router = APIRouter(prefix="/dtw", tags=["dtw"])
 
-# Point to {project}/backend
-PROJECT_BACKEND = Path(__file__).resolve().parent               # .../project/backend
-DTW_BASE        = (PROJECT_BACKEND / "dtw_runs").resolve()
-DTW_BASE.mkdir(parents=True, exist_ok=True)
 
-print(f"[DTW REST] DTW_BASE = {DTW_BASE}")
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
 
-def _test_dir(test_name: str) -> Path:
-    p = DTW_BASE / test_name
-    if not p.is_dir():
-        raise HTTPException(404, f"Unknown test '{test_name}' at {p}")
-    return p
+def _session_scope() -> OrmSession:
+    """Small helper to create/close a DB session."""
+    db = DBSession()
+    return db
 
-def _session_dir(test_name: str, session_id: str) -> Path:
-    p = _test_dir(test_name) / session_id
-    if not p.is_dir():
-        raise HTTPException(404, f"Session '{session_id}' not found under {p.parent}")
-    return p
 
-# --- add these helpers anywhere above the endpoint (e.g., near other helpers) ---
-def _apply_reduce(arr: np.ndarray, how: str) -> np.ndarray:
-    how = (how or "mean").lower()
-    if how == "mean":
-        return arr.mean(axis=1)
-    if how == "median":
-        return np.median(arr, axis=1)
-    if how == "sum":
-        return arr.sum(axis=1)
-    if how == "min":
-        return arr.min(axis=1)
-    if how == "max":
-        return arr.max(axis=1)
-    raise HTTPException(400, f"Unsupported reduce='{how}' (use mean|median|sum|min|max)")
-
-def _parse_landmarks_param(landmarks: str | None, model: str, points: int) -> list[int]:
+def _json_list(value: Any, key: str = "values") -> List:
     """
+    Normalise JSON column into a plain Python list.
+
     Accepts:
-      - None or "all": all landmarks (0..points-1)
-      - CSV like "1,2,3" (0-based indices for pose 0..32; hands 0..20)
-    Returns 0-based positions inside the flattened feature vector.
+      - None -> []
+      - list -> as is
+      - {"values": [...]} -> that list (default key) or given key
     """
-    if landmarks is None or str(landmarks).lower() == "all":
-        return list(range(points))
+    if value is None:
+        return []
+    if isinstance(value, list):
+        return value
+    if isinstance(value, dict):
+        v = value.get(key)
+        if isinstance(v, list):
+            return v
+    return []
 
-    raw = [s.strip() for s in str(landmarks).split(",") if s.strip() != ""]
-    try:
-        req = [int(s) for s in raw]
-    except ValueError:
-        raise HTTPException(400, f"Invalid landmarks list '{landmarks}'. Use 'all' or CSV of integers.")
 
-    for lm in req:
-        if not (0 <= lm < points):
-            raise HTTPException(400, f"landmark {lm} out of range 0..{points-1} for model {model}")
-    return req
+def _downsample(series: List[float], max_points: int) -> List[float]:
+    if not series:
+        return []
+    n = len(series)
+    if n <= max_points:
+        return series
+    step = max(1, n // max_points)
+    idxs = list(range(0, n, step))[:max_points]
+    return [series[i] for i in idxs]
 
+
+def _series_bundle(
+    local_costs: List[float],
+    aligned_idx: List[int],
+    max_points: int,
+) -> Dict[str, Any]:
+    """
+    Build the structure expected by the frontend for a single series.
+    We only have per-step local costs + the mapping from each live
+    index to some reference index.
+    """
+    local_costs = list(local_costs or [])
+    aligned_idx = list(aligned_idx or [])
+    n = len(local_costs)
+
+    if n == 0:
+        return {"local_costs": [], "alignment_map": {"x": [], "y": []}}
+
+    # When downsampling, we keep the relative shape and subsample alignment.
+    if n > max_points:
+        step = max(1, n // max_points)
+        idxs = list(range(0, n, step))[:max_points]
+    else:
+        idxs = list(range(n))
+
+    ds_costs = [local_costs[i] for i in idxs]
+    if aligned_idx and len(aligned_idx) == n:
+        ds_align = [aligned_idx[i] for i in idxs]
+    else:
+        # fallback: simple diagonal mapping
+        ds_align = idxs
+
+    xs = list(range(len(ds_costs)))
+    return {
+        "local_costs": ds_costs,
+        "alignment_map": {"x": xs, "y": ds_align},
+    }
+
+
+# ---------------------------------------------------------------------------
+# Endpoints
+# ---------------------------------------------------------------------------
 
 @router.get("/health")
 def health() -> Dict[str, Any]:
-    return {"ok": True, "base": str(DTW_BASE), "exists": DTW_BASE.exists()}
+    """Simple health check for the DTW REST endpoints."""
+    # We don't touch the DB here; just report basic metadata.
+    return {"ok": True, "backend": "sql", "model": "TestResult"}
+
 
 @router.get("/diag")
-def diag() -> Dict[str, Any]:
-    return {
-        "base": str(DTW_BASE),
-        "exists": DTW_BASE.exists(),
-        "tests": sorted([d.name for d in DTW_BASE.iterdir() if d.is_dir()]) if DTW_BASE.exists() else []
-    }
+def diag(current_user=Depends(get_current_user)) -> Dict[str, Any]:
+    """Return a tiny diagnostic snapshot about stored DTW runs."""
+    db = _session_scope()
+    try:
+        total = db.query(TestResult).count()
+        by_test = (
+            db.query(TestResult.test_name, func.count(TestResult.test_id))
+            .group_by(TestResult.test_name)
+            .all()
+        )
+        return {
+            "backend": "sql",
+            "total_runs": total,
+            "tests": {name or "": count for name, count in by_test},
+        }
+    finally:
+        db.close()
+
 
 @router.get("/tests", response_model=List[str])
-def list_tests() -> List[str]:
-    if not DTW_BASE.exists():
-        return []
-    return sorted([d.name for d in DTW_BASE.iterdir() if d.is_dir()])
+def list_tests(current_user=Depends(get_current_user)) -> List[str]:
+    """
+    List all distinct test names that have DTW/TestResult entries.
+
+    Previously this scanned folders under backend/dtw_runs; now it
+    just uses DISTINCT test_name from the TestResult table.
+    """
+    db = _session_scope()
+    try:
+        rows = db.query(TestResult.test_name).distinct().all()
+        tests = sorted(
+            {name for (name,) in rows if name is not None and str(name).strip() != ""}
+        )
+        return tests
+    finally:
+        db.close()
+
 
 @router.get("/sessions/{test_name}")
-def list_sessions(test_name: str) -> List[Dict[str, Any]]:
-    root = _test_dir(test_name)
-    out: List[Dict[str, Any]] = []
-    for d in sorted(root.iterdir()):
-        if not d.is_dir():
-            continue
-        meta_path = d / "meta.json"
-        if not meta_path.is_file():
-            continue
-        try:
-            meta = json.loads(meta_path.read_text())
-            out.append({
-                "session_id": d.name,
-                "created_utc": meta.get("created_utc"),
-                "model": meta.get("model"),
-                "live_len": meta.get("live_len"),
-                "ref_len": meta.get("ref_len"),
-                # backward-compatible distance/similarity
-                "distance_pos": meta.get("pos_dtw", meta.get("distance")),
-                "similarity_overall": meta.get("similarity_overall", meta.get("similarity")),
-                "similarity_pos": meta.get("similarity_pos"),
-                "similarity_amp": meta.get("similarity_amp"),
-                "similarity_spd": meta.get("similarity_spd"),
-            })
-        except Exception:
-            continue
-    # newest first by timestamp string
-    return sorted(out, key=lambda x: x.get("created_utc") or "", reverse=True)
+def list_sessions(
+    test_name: str,
+    current_user=Depends(get_current_user),
+) -> List[Dict[str, Any]]:
+
+    """
+    List all DTW sessions for a given test name.
+
+    A "session" here is just a row in testresults for that test_name.
+    We expose test_id as the session_id so existing frontend routes
+    can keep working with minimal changes.
+    """
+    db = _session_scope()
+    try:
+        rows = (
+            db.query(TestResult)
+            .filter(TestResult.test_name == test_name)
+            .order_by(TestResult.test_date.desc().nullslast())
+            .all()
+        )
+        out: List[Dict[str, Any]] = []
+        for r in rows:
+            out.append(
+                {
+                    "session_id": r.test_id,  # already string
+                    "test_id": r.test_id,
+                    "patient_id": r.patient_id,
+                    "test_name": r.test_name,
+                    "test_date": r.test_date.isoformat() if r.test_date else None,
+                    "recording_file": r.recording_file,
+                    "frame_count": r.frame_count,
+                    # DTW metrics are optional – they may not exist yet on the model.
+                    "similarity_overall": getattr(r, "similarity_overall", None),
+                    "similarity_pos": getattr(r, "similarity_pos", None),
+                    "similarity_amp": getattr(r, "similarity_amp", None),
+                    "similarity_spd": getattr(r, "similarity_spd", None),
+                    "distance_pos": getattr(r, "distance_pos", None),
+                    "distance_amp": getattr(r, "distance_amp", None),
+                    "distance_spd": getattr(r, "distance_spd", None),
+                }
+            )
+        return out
+    finally:
+        db.close()
+
 
 @router.get("/sessions/{test_name}/{session_id}/series")
 def get_series(
     test_name: str,
     session_id: str,
-    max_points: int = Query(200, ge=50, le=2000)
+    max_points: int = Query(200, ge=50, le=2000),
+    current_user=Depends(get_current_user),
 ) -> Dict[str, Any]:
-    folder = _session_dir(test_name, session_id)
-    npz_path, meta_path = folder / "dtw_artifacts.npz", folder / "meta.json"
-    if not npz_path.is_file() or not meta_path.is_file():
-        raise HTTPException(404, "Artifacts missing")
+    """
+    Return DTW series for a given session.
 
+    This is now backed by TestResult JSON columns instead of NPZ files.
+    We assume the TestResult has JSON columns such as:
+      - pos_local_costs
+      - pos_aligned_ref_by_live
+      - amp_local_costs
+      - amp_aligned_ref_by_live
+      - spd_local_costs
+      - spd_aligned_ref_by_live
+    but we degrade gracefully if they are missing.
+    """
+    sid = session_id  # string-based test_id
+
+    db = _session_scope()
     try:
-        npz = np.load(npz_path, allow_pickle=False)
-    except Exception as e:
-        raise HTTPException(500, f"Failed to load artifacts: {e}")
+        r: Optional[TestResult] = (
+            db.query(TestResult)
+            .filter(TestResult.test_id == sid, TestResult.test_name == test_name)
+            .first()
+        )
+        if r is None:
+            raise HTTPException(status_code=404, detail="Session not found")
 
-    # --- load new arrays from NPZ ---
-    pos_local = npz.get("pos_local_costs")
-    pos_align = npz.get("pos_aligned_ref_by_live")
-    amp_local = npz.get("amp_local_costs")
-    amp_align = npz.get("amp_aligned_ref_by_live")
-    spd_local = npz.get("spd_local_costs")
-    spd_align = npz.get("spd_aligned_ref_by_live")
+        pos_local = _json_list(getattr(r, "pos_local_costs", None))
+        pos_align = _json_list(
+            getattr(r, "pos_aligned_ref_by_live", None), key="indices"
+        )
+        amp_local = _json_list(getattr(r, "amp_local_costs", None))
+        amp_align = _json_list(
+            getattr(r, "amp_aligned_ref_by_live", None), key="indices"
+        )
+        spd_local = _json_list(getattr(r, "spd_local_costs", None))
+        spd_align = _json_list(
+            getattr(r, "spd_aligned_ref_by_live", None), key="indices"
+        )
 
-    if pos_local is None or pos_align is None:
-        raise HTTPException(500, "Corrupt artifacts: missing position arrays")
-    if amp_local is None or amp_align is None:
-        raise HTTPException(500, "Corrupt artifacts: missing amplitude arrays")
-    if spd_local is None or spd_align is None:
-        raise HTTPException(500, "Corrupt artifacts: missing speed arrays")
-
-    try:
-        meta = json.loads(meta_path.read_text())
-    except Exception as e:
-        raise HTTPException(500, f"Failed to read meta.json: {e}")
-
-    def _downsample(arr: np.ndarray, kmax: int = 200) -> Tuple[List[int], List[float]]:
-        n = int(arr.shape[0])
-        if n <= kmax:
-            return list(range(n)), arr.astype(float).tolist()
-        step = max(1, n // kmax)
-        return list(range(0, n, step)), arr[::step].astype(float).tolist()
-
-    def _series_bundle(local: np.ndarray, align: np.ndarray) -> Dict[str, Any]:
-        x_lc, y_lc = _downsample(local, max_points)
-        # normalized cumulative progress along this path
-        cum = (np.cumsum(local, dtype=np.float64) /
-               (float(local.sum()) + 1e-9)).astype(float)
         return {
-            "local_cost_path": {"x": x_lc, "y": y_lc},
-            "cumulative_progress": {
-                "x": list(range(len(cum))),
-                "y": cum.tolist(),
-            },
-            "alignment_map": {
-                "x": list(range(len(align))),
-                "y": align.astype(int).tolist(),
+            "ok": True,
+            "testName": r.test_name,
+            "sessionId": r.test_id,
+            "patient_id": r.patient_id,
+            "test_date": r.test_date.isoformat() if r.test_date else None,
+            # meta: distances & similarities (optional)
+            "distance_pos": getattr(r, "distance_pos", None),
+            "distance_amp": getattr(r, "distance_amp", None),
+            "distance_spd": getattr(r, "distance_spd", None),
+            "avg_step_pos": getattr(r, "avg_step_pos", None),
+            "similarity_overall": getattr(r, "similarity_overall", None),
+            "similarity_pos": getattr(r, "similarity_pos", None),
+            "similarity_amp": getattr(r, "similarity_amp", None),
+            "similarity_spd": getattr(r, "similarity_spd", None),
+            "series": {
+                "position": _series_bundle(pos_local, pos_align, max_points),
+                "amplitude": _series_bundle(amp_local, amp_align, max_points),
+                "speed": _series_bundle(spd_local, spd_align, max_points),
             },
         }
+    finally:
+        db.close()
 
-    return {
-        "ok": True,
-        "testName": test_name,
-        "sessionId": session_id,
-        # meta: distances & similarities
-        "distance_pos": meta.get("pos_dtw", meta.get("distance")),
-        "distance_amp": meta.get("amp_dtw"),
-        "distance_spd": meta.get("spd_dtw"),
-        "avg_step_pos": meta.get("avg_step_pos", meta.get("avg_step_cost")),
-        "similarity_overall": meta.get("similarity_overall", meta.get("similarity")),
-        "similarity_pos": meta.get("similarity_pos"),
-        "similarity_amp": meta.get("similarity_amp"),
-        "similarity_spd": meta.get("similarity_spd"),
-        "series": {
-            "position": _series_bundle(pos_local, pos_align),
-            "amplitude": _series_bundle(amp_local, amp_align),
-            "speed": _series_bundle(spd_local, spd_align),
-        },
-    }
 
 @router.get("/sessions/{test_name}/{session_id}/download")
-def download_paths(test_name: str, session_id: str) -> Dict[str, str]:
-    folder = _session_dir(test_name, session_id)
-    return {
-        "npz": str(folder / "dtw_artifacts.npz"),
-        "meta": str(folder / "meta.json"),
-    }
+def download_recording(
+    test_name: str,
+    session_id: str,
+) -> FileResponse:
+    """
+    Previously this endpoint streamed the NPZ artifacts. Now that DTW runs live
+    in SQL, the most useful thing to download is the underlying recording
+    associated with this session.
+    """
+    sid = session_id  # string-based test_id
+
+    db = _session_scope()
+    try:
+        r: Optional[TestResult] = (
+            db.query(TestResult)
+            .filter(TestResult.test_id == sid, TestResult.test_name == test_name)
+            .first()
+        )
+        if r is None:
+            raise HTTPException(status_code=404, detail="Session not found")
+
+        if not r.recording_file:
+            raise HTTPException(
+                status_code=404, detail="No recording linked to this session"
+            )
+
+        # recordings folder is alongside this routes module (backend/routes/recordings)
+        recordings_dir = os.path.join(os.path.dirname(__file__), "recordings")
+        path = os.path.join(recordings_dir, r.recording_file)
+        if not os.path.isfile(path):
+            raise HTTPException(
+                status_code=404, detail="Recording file not found on disk"
+            )
+
+        return FileResponse(
+            path,
+            filename=os.path.basename(path),
+            media_type="video/mp4",
+        )
+    finally:
+        db.close()
+
 
 @router.get("/sessions/lookup/{session_id}")
-def lookup_session(session_id: str) -> Dict[str, str]:
-    if not DTW_BASE.exists():
-        raise HTTPException(404, "DTW base not found")
-    for t in DTW_BASE.iterdir():
-        if not t.is_dir():
-            continue
-        if (t / session_id).is_dir():
-            return {"testName": t.name, "sessionId": session_id}
-    raise HTTPException(404, {"error": str(DTW_BASE)})
-
-def _infer_points_and_kpp(D: int, model: str) -> Tuple[int, int]:
+def lookup_session(session_id: str) -> Dict[str, Any]:
     """
-    Infer (#points, dims-per-point) from feature dimension D and model.
-    - pose: 33 points
-    - hands: 21 points (full Mediapipe hand)
+    Convenience endpoint: given a global session_id (test_id), return
+    its associated test_name and basic metadata.
     """
-    model = (model or "").lower()
-    if model == "pose":
-        points = 33
-        if D % points != 0:
-            raise HTTPException(500, f"Template dimension {D} not divisible by pose points {points}")
-        return points, D // points
+    sid = session_id  # string-based test_id
 
-    if model == "hands":
-        points = 21
-        if D % points != 0:
-            raise HTTPException(500, f"Template dimension {D} not divisible by hands points {points}")
-        return points, D // points
+    db = _session_scope()
+    try:
+        r: Optional[TestResult] = (
+            db.query(TestResult)
+            .filter(TestResult.test_id == sid)
+            .first()
+        )
+        if r is None:
+            raise HTTPException(status_code=404, detail="Session not found")
 
-    raise HTTPException(500, f"Unknown model '{model}' in meta.json")
+        return {
+            "session_id": r.test_id,
+            "test_name": r.test_name,
+            "patient_id": r.patient_id,
+            "test_date": r.test_date.isoformat() if r.test_date else None,
+            "recording_file": r.recording_file,
+        }
+    finally:
+        db.close()
 
-def _downsample_xy(x: np.ndarray, y: np.ndarray, kmax: int) -> Tuple[List[int], List[float]]:
-    n = int(len(x))
-    if n <= kmax:
-        return x.astype(int).tolist(), y.astype(float).tolist()
-    step = max(1, n // kmax)
-    return x[::step].astype(int).tolist(), y[::step].astype(float).tolist()
 
 @router.get("/sessions/{test_name}/{session_id}/channel")
-def get_channel_series(
+def get_channel(
     test_name: str,
     session_id: str,
-    landmark: int = Query(0, ge=0, description="0..20 for hands; 0..32 for pose"),
-    axis: str = Query("x", regex="^(x|y|z)$"),
-    max_points: int = Query(400, ge=50, le=3000),
+    model: str = Query(..., description="pose|hands|finger"),
+    landmark: int = Query(..., ge=0),
+    axis: str = Query("x", regex="^[xyz]$"),
+    max_points: int = Query(200, ge=50, le=2000),
 ) -> Dict[str, Any]:
     """
-    Returns original live/ref series for a single channel (landmark+axis),
-    along with the DTW path and the aligned (warped) pair series.
+    In the original filesystem-based implementation this endpoint returned
+    a single landmark+axis channel with the aligned live/ref series.
+
+    With the current SQL schema we only persist aggregate DTW series, not
+    per-axis raw trajectories, so we can't faithfully reconstruct that view.
+    For now we return a 501 so it's clear to the caller that this endpoint
+    is not wired up in the SQL-backed version.
     """
-    folder = _session_dir(test_name, session_id)
-    npz_path, meta_path = folder / "dtw_artifacts.npz", folder / "meta.json"
-    if not npz_path.is_file() or not meta_path.is_file():
-        raise HTTPException(404, "Artifacts missing")
+    raise HTTPException(
+        status_code=501,
+        detail="Per-channel series are not available in the SQL-backed DTW storage.",
+    )
 
-    try:
-        npz = np.load(npz_path, allow_pickle=False)
-        X_live = npz["X_live"]          # (T_live, D)
-        Y_ref  = npz["Y_ref"]           # (T_ref, D)
-        path   = npz["pos_path"]            # (L, 2) int32
-    except Exception as e:
-        raise HTTPException(500, f"Failed to load artifacts: {e}")
 
-    try:
-        meta = json.loads(meta_path.read_text())
-        model = (meta.get("model") or "pose").lower()
-    except Exception as e:
-        raise HTTPException(500, f"Failed to read meta.json: {e}")
-
-    T_live, D = int(X_live.shape[0]), int(X_live.shape[1])
-    T_ref     = int(Y_ref.shape[0])
-    points, kpp = _infer_points_and_kpp(D, model)
-
-    if not (0 <= landmark < points):
-        raise HTTPException(400, f"landmark index {landmark} out of range 0..{points-1}")
-
-    axis_idx = {"x": 0, "y": 1, "z": 2}.get(axis, 0)
-    if kpp <= axis_idx:
-        # z requested but features are 2D, or bad axis
-        raise HTTPException(400, f"axis '{axis}' not available (dims-per-point={kpp})")
-
-    d_index = landmark * kpp + axis_idx
-
-    # Original series (indices are frame numbers)
-    live_y = X_live[:, d_index]
-    ref_y  = Y_ref[:,  d_index]
-    live_x = np.arange(T_live, dtype=np.int32)
-    ref_x  = np.arange(T_ref,  dtype=np.int32)
-
-    # Aligned (warped) pairs along the DTW path
-    i_idx = path[:, 0].astype(np.int32)
-    j_idx = path[:, 1].astype(np.int32)
-    k_idx = np.arange(len(path), dtype=np.int32)
-
-    warped_live = live_y[i_idx]
-    warped_ref  = ref_y[j_idx]
-
-    # Downsample for plotting
-    live_x_ds, live_y_ds = _downsample_xy(live_x, live_y, max_points)
-    ref_x_ds,  ref_y_ds  = _downsample_xy(ref_x,  ref_y,  max_points)
-
-    if len(k_idx) > max_points:
-        step = max(1, len(k_idx) // max_points)
-        k_idx_ds = k_idx[::step]
-        i_idx_ds = i_idx[::step]
-        j_idx_ds = j_idx[::step]
-        warped_live_ds = warped_live[::step]
-        warped_ref_ds  = warped_ref[::step]
-    else:
-        k_idx_ds = k_idx
-        i_idx_ds = i_idx
-        j_idx_ds = j_idx
-        warped_live_ds = warped_live
-        warped_ref_ds  = warped_ref
-
-    return {
-        "ok": True,
-        "model": model,
-        "D": D,
-        "points": points,
-        "dims_per_point": kpp,
-        "channel": {"landmark": landmark, "axis": axis, "d_index": int(d_index)},
-        "live": {"x": [int(v) for v in live_x_ds], "y": [float(v) for v in live_y_ds]},
-        "ref":  {"x": [int(v) for v in ref_x_ds],  "y": [float(v) for v in ref_y_ds]},
-        "warped": {
-            "k":  [int(v) for v in k_idx_ds],
-            "live": [float(v) for v in warped_live_ds],
-            "ref":  [float(v) for v in warped_ref_ds],
-        },
-        "path": {
-            "i": [int(v) for v in i_idx_ds],
-            "j": [int(v) for v in j_idx_ds],
-        }
-    }
-
-   
-# --- Aggregate one axis across many (or all) landmarks into a 1D series ---
 @router.get("/sessions/{test_name}/{session_id}/axis_agg")
-def get_axis_aggregate(
+def axis_agg(
     test_name: str,
     session_id: str,
-    axis: str = Query("x", regex="^(x|y|z)$"),
-    landmarks: str | None = Query(
-        None,
-        description="Use 'all' or CSV (e.g., '0,1,2'). Hands: 0..20. Pose: 0..32."
+    model: str = Query(
+        "pose",
+        description="pose|hands|finger (kept for compatibility; not used)"
     ),
-    reduce: str = Query("mean", description="Aggregation over selected landmarks per frame: mean|median|sum|min|max"),
-    max_points: int = Query(600, ge=50, le=5000),
+    axis: str = Query("x", regex="^[xyz]$"),
+    landmarks: Optional[str] = Query(
+        None,
+        description=(
+            "Landmark indices CSV or 'all'; kept for compatibility but not "
+            "currently used in the SQL-backed implementation."
+        ),
+    ),
+    how: str = Query(
+        "mean",
+        alias="reduce",
+        description="Reduction over landmarks: mean|median|sum|min|max",
+    ),
+    max_points: int = Query(200, ge=50, le=2000),
 ) -> Dict[str, Any]:
-    folder = _session_dir(test_name, session_id)
-    npz_path, meta_path = folder / "dtw_artifacts.npz", folder / "meta.json"
-    if not npz_path.is_file() or not meta_path.is_file():
-        raise HTTPException(404, "Artifacts missing")
-
+    sid = session_id
+    db = _session_scope()
     try:
-        npz = np.load(npz_path, allow_pickle=False)
-        X_live = npz["X_live"]          # (T_live, D)
-        Y_ref  = npz["Y_ref"]           # (T_ref, D)
-        path   = npz["pos_path"]            # (L, 2) int32
-    except Exception as e:
-        raise HTTPException(500, f"Failed to load artifacts: {e}")
+        r: Optional[TestResult] = (
+            db.query(TestResult)
+            .filter(TestResult.test_id == sid, TestResult.test_name == test_name)
+            .first()
+        )
+        if r is None:
+            raise HTTPException(status_code=404, detail="Session not found")
 
-    try:
-        meta = json.loads(meta_path.read_text())
-        model = (meta.get("model") or "pose").lower()
-    except Exception as e:
-        raise HTTPException(500, f"Failed to read meta.json: {e}")
+        # Pull stored arrays
+        pos_local = _json_list(getattr(r, "pos_local_costs", None))
+        pos_align = _json_list(
+            getattr(r, "pos_aligned_ref_by_live", None),
+            key="indices",
+        )
 
-    T_live, D = int(X_live.shape[0]), int(X_live.shape[1])
-    T_ref     = int(Y_ref.shape[0])
-    points, kpp = _infer_points_and_kpp(D, model)
+        # New-style bundle (kept so you can use it later if you want)
+        bundle = _series_bundle(pos_local, pos_align, max_points)
 
-    axis_idx = {"x": 0, "y": 1, "z": 2}.get(axis, 0)
-    if kpp <= axis_idx:
-        raise HTTPException(400, f"axis '{axis}' not available (dims-per-point={kpp})")
+        # ---- Backward-compat: synthesize old AxisAggResponse shape ----
+        local_costs = bundle.get("local_costs") or []
+        align = bundle.get("alignment_map") or {}
+        map_x = align.get("x") or list(range(len(local_costs)))
+        map_y = align.get("y") or map_x
 
-    # Resolve landmarks (supports 'all' and CSV)
-    lm_positions = _parse_landmarks_param(landmarks, model, points)
-    if len(lm_positions) == 0:
-        raise HTTPException(400, "No valid landmarks selected for aggregation")
+        n = min(len(local_costs), len(map_x), len(map_y))
+        local_costs = local_costs[:n]
+        map_x = map_x[:n]
+        map_y = map_y[:n]
 
-    # Compute channel indices for chosen axis and aggregate per frame
-    d_indices = np.asarray([lm * kpp + axis_idx for lm in lm_positions], dtype=np.int32)
-    live_mat = X_live[:, d_indices]
-    ref_mat  = Y_ref[:,  d_indices]
-    live_series = _apply_reduce(live_mat, reduce).astype(np.float32)
-    ref_series  = _apply_reduce(ref_mat,  reduce).astype(np.float32)
+        # Simple index for plotting on the x-axis
+        xs = list(range(n))
 
-    # Original x-axes
-    live_x = np.arange(T_live, dtype=np.int32)
-    ref_x  = np.arange(T_ref,  dtype=np.int32)
+        live = {"x": xs, "y": local_costs}
+        ref = {"x": xs, "y": local_costs}
+        path = {"i": map_x, "j": map_y}
+        warped = {"k": xs, "live": local_costs, "ref": local_costs}
 
-    # Warped series along DTW path
-    i_idx = path[:, 0].astype(np.int32)
-    j_idx = path[:, 1].astype(np.int32)
-    k_idx = np.arange(len(path), dtype=np.int32)
-    warped_live = live_series[i_idx]
-    warped_ref  = ref_series[j_idx]
-
-    # Downsample for plotting
-    live_x_ds, live_y_ds = _downsample_xy(live_x, live_series, max_points)
-    ref_x_ds,  ref_y_ds  = _downsample_xy(ref_x,  ref_series,  max_points)
-
-    if len(k_idx) > max_points:
-        step = max(1, len(k_idx) // max_points)
-        k_idx_ds = k_idx[::step]
-        i_idx_ds = i_idx[::step]
-        j_idx_ds = j_idx[::step]
-        warped_live_ds = warped_live[::step]
-        warped_ref_ds  = warped_ref[::step]
-    else:
-        k_idx_ds = k_idx
-        i_idx_ds = i_idx
-        j_idx_ds = j_idx
-        warped_live_ds = warped_live
-        warped_ref_ds  = warped_ref
-
-    return {
-        "ok": True,
-        "model": model,
-        "D": D,
-        "points": points,
-        "dims_per_point": kpp,
-        "axis": axis,
-        "reduce": reduce,
-        "landmarks_in": "all" if (landmarks is None or str(landmarks).lower()=="all") else landmarks,
-        "resolved_positions": [int(v) for v in lm_positions],
-        "live": {"x": [int(v) for v in live_x_ds], "y": [float(v) for v in live_y_ds]},
-        "ref":  {"x": [int(v) for v in ref_x_ds],  "y": [float(v) for v in ref_y_ds]},
-        "warped": {
-            "k":  [int(v) for v in k_idx_ds],
-            "live": [float(v) for v in warped_live_ds],
-            "ref":  [float(v) for v in warped_ref_ds],
-        },
-        "path": {
-            "i": [int(v) for v in i_idx_ds],
-            "j": [int(v) for v in j_idx_ds],
+        return {
+            "ok": True,
+            "testName": r.test_name,
+            "sessionId": str(r.test_id),
+            "axis": axis,
+            "how": how,
+            "reduce": how,   # what your React UI displays as {data.reduce}
+            "landmarks": "all",  # new line: matches AxisAggResponse.landmarks?
+            "series": bundle,  # new-style data (optional, not used yet)
+            "live": live,
+            "ref": ref,
+            "path": path,
+            "warped": warped,
         }
-    }
+    finally:
+        db.close()

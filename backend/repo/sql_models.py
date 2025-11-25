@@ -81,12 +81,56 @@ class DoctorNote(Base):
 
 class TestResult(Base):
     __tablename__ = "testresults"
-    test_id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    patient_id: Mapped[str] = mapped_column(ForeignKey("patients.patient_id", ondelete="CASCADE"), nullable=False, index=True)
-    test_name: Mapped[Optional[str]] = mapped_column(String(100))
-    test_date: Mapped[Optional[datetime]] = mapped_column(DateTime)
+
+    test_id: Mapped[str] = mapped_column(String(512), primary_key=True)
+
+    # FK
+    patient_id: Mapped[str] = mapped_column(
+        ForeignKey("patients.patient_id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+
+    # Basic test metadata
+    test_name: Mapped[Optional[str]] = mapped_column(String(100), index=True)
+    test_date: Mapped[Optional[datetime]] = mapped_column(
+        DateTime, default=datetime.utcnow, index=True
+    )
+    model: Mapped[Optional[str]] = mapped_column(String(50))   # "hands" | "pose" | "finger"
+    fps: Mapped[Optional[float]] = mapped_column()             # capture fps hint
+
+    # Video info (link to recording on disk)
     recording_file: Mapped[Optional[str]] = mapped_column(String(512))
     frame_count: Mapped[Optional[int]] = mapped_column(Integer)
+
+    # DTW scalar metrics
+    similarity_overall: Mapped[Optional[float]] = mapped_column()
+    similarity_pos: Mapped[Optional[float]] = mapped_column()
+    similarity_amp: Mapped[Optional[float]] = mapped_column()
+    similarity_spd: Mapped[Optional[float]] = mapped_column()
+
+    distance_pos: Mapped[Optional[float]] = mapped_column()
+    distance_amp: Mapped[Optional[float]] = mapped_column()
+    distance_spd: Mapped[Optional[float]] = mapped_column()
+
+    avg_step_pos: Mapped[Optional[float]] = mapped_column()
+
+    # R and L scalers (optional, but nice to keep for later analysis)
+    R_pos: Mapped[Optional[float]] = mapped_column()
+    R_amp: Mapped[Optional[float]] = mapped_column()
+    R_spd: Mapped[Optional[float]] = mapped_column()
+    L_pos: Mapped[Optional[float]] = mapped_column()
+    L_amp: Mapped[Optional[float]] = mapped_column()
+    L_spd: Mapped[Optional[float]] = mapped_column()
+
+    # Optional: store the per-frame series / alignment needed for plots in JSON
+    pos_local_costs: Mapped[Optional[Dict]] = mapped_column(JSON)          # {"values": [...]}
+    pos_aligned_ref_by_live: Mapped[Optional[Dict]] = mapped_column(JSON)  # {"indices": [...]}
+    amp_local_costs: Mapped[Optional[Dict]] = mapped_column(JSON)
+    amp_aligned_ref_by_live: Mapped[Optional[Dict]] = mapped_column(JSON)
+    spd_local_costs: Mapped[Optional[Dict]] = mapped_column(JSON)
+    spd_aligned_ref_by_live: Mapped[Optional[Dict]] = mapped_column(JSON)
+
     patient: Mapped["Patient"] = relationship(back_populates="testresults")
 
 # SQLite FK enforcement

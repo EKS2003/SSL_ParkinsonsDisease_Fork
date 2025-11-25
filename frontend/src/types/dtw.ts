@@ -18,6 +18,31 @@ export const normalizeTestKey = (t?: string | null): CanonicalTest | null => {
 
 // ===== DTW REST payload types =====
 
+export type BackendDtwSessionRow = {
+  session_id: string;
+  test_id: string;
+  patient_id: string;
+  test_name: string;
+  test_date: string | null;
+  recording_file?: string | null;
+  frame_count?: number | null;
+  similarity_overall?: number | null;
+  similarity_pos?: number | null;
+  similarity_amp?: number | null;
+  similarity_spd?: number | null;
+  distance_pos?: number | null;
+  distance_amp?: number | null;
+  distance_spd?: number | null;
+};
+
+export type BackendLookupSession = {
+  session_id: string;
+  test_name: string;
+  patient_id?: string | null;
+  test_date?: string | null;
+  recording_file?: string | null;
+};
+
 export type DtwSessionMeta = {
   session_id: string;
   created_utc: string;
@@ -32,17 +57,20 @@ export type AxisAggResponse = {
   ok: boolean;
   axis: "x" | "y" | "z";
   reduce: "mean" | "median" | "pca1";
-  landmarks: "all" | number[];
+  landmarks?: "all" | number[];
   live: { x: number[]; y: number[] };
   ref: { x: number[]; y: number[] };
   path: { i: number[]; j: number[] };
   warped: { k: number[]; live: number[]; ref: number[] };
 };
 
+
 export type DtwSeriesCurve = {
-  local_cost_path: { x: number[]; y: number[] };
-  cumulative_progress: { x: number[]; y: number[] };
+  local_costs: number[];
   alignment_map: { x: number[]; y: number[] };
+  // optional future fields to keep old code happy:
+  local_cost_path?: { x: number[]; y: number[] };
+  cumulative_progress?: { x: number[]; y: number[] };
 };
 
 export type DtwSeriesMetrics = {

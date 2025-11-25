@@ -1,24 +1,27 @@
 from fastapi import FastAPI, HTTPException, Query, UploadFile, File, Form, Body, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
-from typing import Dict, List, Optional, Annotated
-from datetime import datetime, timedelta
+from typing import Dict
+from datetime import datetime
 import os
 import shutil
 import uvicorn
 from sqlalchemy.exc import IntegrityError
+from fastapi.staticfiles import StaticFiles
+
 
 from routes.dtw_rest import router as dtw_router
 from routes.patient import router as patient_router
 from routes.websockets import router as ws_router
-from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
-from repo.sql_models import User
-from repo.db import engine
-from jose import jwt, JWTError
-from passlib.context import CryptContext
+from routes import websockets 
+from routes import videos
+from fastapi.security import  OAuth2PasswordRequestForm
+from repo.sql_models import User,TestResult, Patient
 from patient_manager import SessionLocal
 from schema.user import UserSignup
-from auth import authenticate, create_access_token, pwd
+from auth import authenticate, create_access_token, pwd, get_current_user
+from uuid import uuid4
+
 
 
 # ============ Paths / Folders ============
@@ -29,14 +32,14 @@ os.makedirs(RECORDINGS_DIR, exist_ok=True)
 # ============ Lazy imports (avoid libGL issues on boot) ============
 
 # ============ Patient Manager ============
-from patient_manager import (
-    TestHistoryManager
-)
+
 
 app = FastAPI(title="Patient Management API")
 app.include_router(dtw_router)
 app.include_router(patient_router)
 app.include_router(ws_router)
+app.include_router(videos.router)
+
 
 # ============ CORS ============
 app.add_middleware(
@@ -142,17 +145,138 @@ async def health_check():
     return {"status": "healthy", "message": "API is running"}
 
 # ============ REST: Test History ============
+# ============ REST: Test History ============
 @app.get("/patients/{patient_id}/tests", response_model=Dict)
-async def get_patient_tests(patient_id: str):
-    thm = TestHistoryManager()
-    tests = thm.get_patient_tests(patient_id)
+async def get_patient_tests(
+    patient_id: str,
+    current_user=Depends(get_current_user),
+):
+    """
+    Return all TestResult rows for this patient (only if they belong to current_user).
+    """
+    with SessionLocal() as session:
+        patient = (
+            session.query(Patient)
+            .filter(
+                Patient.patient_id == patient_id,
+                Patient.user_id == current_user.id,
+            )
+            .first()
+        )
+        if not patient:
+            raise HTTPException(status_code=404, detail="Patient not found")
+
+        results = (
+            session.query(TestResult)
+            .filter(TestResult.patient_id == patient_id)
+            .order_by(TestResult.test_date.desc().nullslast())
+            .all()
+        )
+
+        tests = []
+        for r in results:
+            tests.append(
+                {
+                    "test_id": r.test_id,
+                    "patient_id": r.patient_id,
+                    "test_name": r.test_name,
+                    "test_date": r.test_date.isoformat() if r.test_date else None,
+                    "model": r.model,
+                    "fps": r.fps,
+                    "recording_file": r.recording_file,
+                    "frame_count": r.frame_count,
+                    "similarity_overall": r.similarity_overall,
+                    "similarity_pos": r.similarity_pos,
+                    "similarity_amp": r.similarity_amp,
+                    "similarity_spd": r.similarity_spd,
+                    "distance_pos": r.distance_pos,
+                    "distance_amp": r.distance_amp,
+                    "distance_spd": r.distance_spd,
+                    "avg_step_pos": r.avg_step_pos,
+                }
+            )
+
     return {"success": True, "tests": tests}
 
+
 @app.post("/patients/{patient_id}/tests", response_model=Dict)
-async def add_patient_test(patient_id: str, test_data: dict = Body(...)):
-    thm = TestHistoryManager()
-    thm.add_patient_test(patient_id, test_data)
-    return {"success": True}
+async def add_patient_test(
+    patient_id: str,
+    test_data: dict = Body(...),
+    current_user=Depends(get_current_user),
+):
+    """
+    Insert a new TestResult row for this patient.
+    test_data can contain any TestResult fields (similarities, distances, series, etc.).
+    """
+    with SessionLocal() as session:
+        patient = (
+            session.query(Patient)
+            .filter(
+                Patient.patient_id == patient_id,
+                Patient.user_id == current_user.id,
+            )
+            .first()
+        )
+        if not patient:
+            raise HTTPException(status_code=404, detail="Patient not found")
+
+        allowed_fields = {
+            "test_id",
+            "test_name",
+            "test_date",
+            "model",
+            "fps",
+            "recording_file",
+            "frame_count",
+            "similarity_overall",
+            "similarity_pos",
+            "similarity_amp",
+            "similarity_spd",
+            "distance_pos",
+            "distance_amp",
+            "distance_spd",
+            "avg_step_pos",
+            "R_pos",
+            "R_amp",
+            "R_spd",
+            "L_pos",
+            "L_amp",
+            "L_spd",
+            "pos_local_costs",
+            "pos_aligned_ref_by_live",
+            "amp_local_costs",
+            "amp_aligned_ref_by_live",
+            "spd_local_costs",
+            "spd_aligned_ref_by_live",
+        }
+
+        data = {k: v for k, v in test_data.items() if k in allowed_fields}
+
+        # Generate a test_id if not provided
+        if not data.get("test_id"):
+            data["test_id"] = test_data.get("session_id") or f"test-{uuid4().hex}"
+
+        # Parse test_date if it's a string
+        if "test_date" in data and isinstance(data["test_date"], str):
+            try:
+                data["test_date"] = datetime.fromisoformat(data["test_date"])
+            except ValueError:
+                data["test_date"] = datetime.utcnow()
+
+        result = TestResult(
+            patient_id=patient_id,
+            **data,
+        )
+        session.add(result)
+        session.commit()
+        session.refresh(result)
+
+        return {
+            "success": True,
+            "test_id": result.test_id,
+        }
+
 
 
 
@@ -162,7 +286,8 @@ async def add_patient_test(patient_id: str, test_data: dict = Body(...)):
 async def upload_video(
     patient_id: str = Form(...),
     test_name: str = Form(...),
-    video: UploadFile = File(...)
+    video: UploadFile = File(...),
+    current_user=Depends(get_current_user),
 ):
     try:
         now_str = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
@@ -183,23 +308,84 @@ async def upload_video(
         return {"success": False, "error": str(e)}
 
 @app.get("/videos/{patient_id}/{test_name}", response_model=Dict)
-def list_videos(patient_id: str, test_name: str):
+def list_videos(
+    patient_id: str,
+    test_name: str,
+    current_user=Depends(get_current_user),
+):
     try:
-        files = os.listdir(RECORDINGS_DIR)
-        matching = [
-            f for f in files
-            if f.startswith(f"{patient_id}_{test_name}_") and (f.endswith(".mov") or f.endswith(".mp4"))
-        ]
-        matching.sort(
-            key=lambda f: os.path.getmtime(os.path.join(RECORDINGS_DIR, f)),
-            reverse=True
-        )
+        with SessionLocal() as session:
+            patient = (
+                session.query(Patient)
+                .filter(
+                    Patient.patient_id == patient_id,
+                    Patient.user_id == current_user.id,
+                )
+                .first()
+            )
+            if not patient:
+                raise HTTPException(status_code=404, detail="Patient not found")
+
+            results = (
+                session.query(TestResult)
+                .filter(
+                    TestResult.patient_id == patient_id,
+                    TestResult.test_name == test_name,
+                    TestResult.recording_file != None
+                )
+                .all()
+            )
+
+            matching = []
+            for r in results:
+                matching.append({
+                    "test_id": r.test_id,
+                    "recording_file": r.recording_file,
+                })
         return {"success": True, "videos": matching}
     except Exception as e:
         return {"success": False, "error": str(e)}
 
-@app.get("/recordings/{filename}", response_class=FileResponse)
-def get_recording_file(filename: str):
+app.mount(
+    "/recordings",
+    StaticFiles(directory=websockets.RECORDINGS_DIR),
+    name="recordings",
+)
+
+@app.get("/recordings/{patient_id}/{test_id}", response_class=FileResponse)
+def get_recording_file(
+    patient_id: str,
+    test_id: str,
+    current_user=Depends(get_current_user),
+):
+    
+    try:
+        with SessionLocal() as session:
+            patient = (
+                session.query(Patient)
+                .filter(
+                    Patient.patient_id == patient_id,
+                    Patient.user_id == current_user.id,
+                )
+                .first()
+            )
+            if not patient:
+                raise HTTPException(status_code=404, detail="Patient not found")
+
+            result = (
+                session.query(TestResult)
+                .filter(
+                    TestResult.patient_id == patient_id,
+                    TestResult.test_id == test_id,
+                )
+                .first()
+            )
+            if not result or not result.recording_file:
+                raise HTTPException(status_code=404, detail="Video not found")
+            filename = result.recording_file
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+    
     file_path = os.path.join(RECORDINGS_DIR, filename)
     if not os.path.exists(file_path):
         raise HTTPException(status_code=404, detail="Video not found")

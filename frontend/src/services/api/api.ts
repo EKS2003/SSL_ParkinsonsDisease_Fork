@@ -19,6 +19,8 @@ import type {
   CanonicalTest,
   DtwSessionMeta,
   DtwSeriesMetrics,
+  BackendDtwSessionRow,
+  BackendLookupSession,
 } from "@/types/dtw";
 // API service class
 
@@ -486,28 +488,43 @@ class ApiService {
     idOrSession: string,
     signal?: AbortSignal
   ): Promise<{ testName: string; sessionId: string }> {
-    const res = await this.request<{ testName: string; sessionId: string }>(
+    const res = await this.request<BackendLookupSession>(
       `/dtw/sessions/lookup/${encodeURIComponent(idOrSession)}`,
       { signal }
     );
     if (!res.success || !res.data) {
       throw new Error(res.error || "Failed to resolve DTW route");
     }
-    return res.data;
+
+    // Map backend → frontend shape
+    return {
+      testName: res.data.test_name,
+      sessionId: res.data.session_id,
+    };
   }
 
   async listDtwSessions(
     testKey: CanonicalTest,
     signal?: AbortSignal
   ): Promise<DtwSessionMeta[]> {
-    const res = await this.request<DtwSessionMeta[]>(
+    const res = await this.request<BackendDtwSessionRow[]>(
       `/dtw/sessions/${encodeURIComponent(testKey)}`,
       { signal }
     );
     if (!res.success || !res.data) {
       throw new Error(res.error || "Failed to list DTW sessions");
     }
-    return res.data;
+
+    // Adapt SQL-backed rows to the older DtwSessionMeta shape
+    const mapped: DtwSessionMeta[] = res.data.map((row) => ({
+      session_id: row.session_id,
+      created_utc: row.test_date ?? "",
+      // we don't have model/live_len/ref_len in SQL schema, leave undefined
+      distance: row.distance_pos ?? undefined,
+      similarity: row.similarity_overall ?? undefined,
+    }));
+
+    return mapped;
   }
 
   async getDtwSeriesMetrics(
@@ -566,7 +583,7 @@ class ApiService {
     return res.data;
   }
 
-  async listTestVideos(
+ async listTestVideos(
     patientId: string,
     testKey: CanonicalTest,
     signal?: AbortSignal
@@ -581,21 +598,32 @@ class ApiService {
     return res.data;
   }
 
+  // SIMPLE: build a public URL to a recording
+  public buildVideoUrl(filename: string): string {
+    return `${this.baseUrl}/recordings/${encodeURIComponent(filename)}`;
+  }
+
   async downloadDtwPayload(
     testKey: CanonicalTest,
     sessionId: string,
     signal?: AbortSignal
-  ): Promise<{ npz: string; meta: string }> {
-    const res = await this.request<{ npz: string; meta: string }>(
-      `/dtw/sessions/${encodeURIComponent(testKey)}/${encodeURIComponent(
-        sessionId
-      )}/download`,
-      { signal }
-    );
-    if (!res.success || !res.data) {
-      throw new Error(res.error || "Failed to download DTW payload");
+  ): Promise<Blob> {
+    const url = `${this.baseUrl}/dtw/sessions/${encodeURIComponent(
+      testKey
+    )}/${encodeURIComponent(sessionId)}/download`;
+
+    const headers: HeadersInit = {};
+    if (this.accessToken) {
+      headers["Authorization"] = `Bearer ${this.accessToken}`;
     }
-    return res.data;
+
+    const response = await fetch(url, { headers, signal });
+    if (!response.ok) {
+      throw new Error(
+        `Failed to download DTW recording (status ${response.status})`
+      );
+    }
+    return await response.blob();
   }
 }
 
