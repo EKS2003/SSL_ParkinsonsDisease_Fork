@@ -446,5 +446,19 @@
       "recording_file": "ws_recording_2025-11-19_23-29-32_de5038ba-b43d-4008-851d-3124294e7579.mp4",
       "frame_count": 166
     }
+  ],
+  "micha1763755047": [
+    {
+      "test_name": "finger-tapping",
+      "date": "2025-12-19T21:52:32.046323",
+      "recording_file": "ws_recording_2025-12-19_16-52-31_5e0a3b4d-b932-4603-b12f-c4a7a8b16da4.mp4",
+      "frame_count": 233
+    },
+    {
+      "test_name": "finger-tapping",
+      "date": "2025-12-19T21:53:51.441449",
+      "recording_file": "ws_recording_2025-12-19_16-53-50_09e045e8-b3ab-473f-a313-9b2c83c42821.mp4",
+      "frame_count": 230
+    }
   ]
 }

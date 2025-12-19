@@ -10,6 +10,7 @@ import {
   Play,
   User,
   Stethoscope,
+  TrendingUp,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -408,6 +409,12 @@ const PatientDetails = () => {
                 <Edit className="mr-2 h-4 w-4" />
                 Edit Patient
               </Button>
+              <Link to={`/patients/${id}/timeline`}>
+                <Button variant="outline">
+                  <TrendingUp className="mr-2 h-4 w-4" />
+                  View Timeline
+                </Button>
+              </Link>
               <Link to={`/patient/${id}/test-selection`}>
                 <Button className="bg-primary hover:bg-primary-hover">
                   <Plus className="mr-2 h-4 w-4" />

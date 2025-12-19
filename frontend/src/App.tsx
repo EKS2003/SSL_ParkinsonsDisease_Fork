@@ -9,6 +9,7 @@ import PatientForm from "./pages/PatientForm";
 import TestSelection from "./pages/TestSelection";
 import VideoRecording from "./pages/VideoRecording";
 import VideoSummary from "./pages/VideoSummary";
+import Timeline from "./pages/Timeline";
 import NotFound from "./pages/NotFound";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
@@ -31,6 +32,7 @@ const App = () => (
           <Route path="/patient/:id/test-selection" element={<TestSelection />} />
           <Route path="/patient/:id/video-recording/:testId" element={<VideoRecording />} />
           <Route path="/patient/:id/video-summary/:testId" element={<VideoSummary />} />
+          <Route path="/patients/:patientId/timeline" element={<Timeline />} />
           <Route path="/login" element={<Login />}/>
           <Route path="/register" element={<Register />}/>
           <Route path="/profile" element={<Profile />}/>
