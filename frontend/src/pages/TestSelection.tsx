@@ -95,21 +95,10 @@ const TestSelection = () => {
 
         // tests
         if (testsRes.success && testsRes.data) {
-          const normalized: Test[] = testsRes.data.map((t: any) => ({
-            id: String(t.test_id),
-            patientId: t.patient_id,
-            name: t.test_name ?? 'Unknown test',
-            // backend stores the concrete name (e.g. "stand-and-sit")
-            // so we can reuse it as the union; fallback to 'stand-and-sit'
-            type: (t.test_name as 'stand-and-sit' | 'fist-open-close') ?? 'stand-and-sit',
-            date: t.test_date ? new Date(t.test_date) : new Date(),
-            status: t.recording_file ? 'completed' : 'pending',
-            videoUrl: t.recording_file,
-            results: t.keypoints ? { raw: t.keypoints } as any : undefined,
-          }));
-          setTestHistory(normalized);
-          console.log(testHistory )
-        }
+  // testsRes.data is already Test[]
+  setTestHistory(testsRes.data);
+}
+
       } catch (err: any) {
         setError(err.message || 'Failed to connect to server');
       } finally {
