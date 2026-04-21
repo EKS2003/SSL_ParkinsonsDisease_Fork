@@ -5,6 +5,7 @@ import os
 import base64
 import json
 from datetime import datetime
+from pathlib import Path
 import uuid
 
 
@@ -22,6 +23,11 @@ router = APIRouter(prefix="/ws", tags=["websockets"])
 RECORDINGS_DIR = os.path.join(os.path.dirname(__file__), "recordings")
 os.makedirs(RECORDINGS_DIR, exist_ok=True)
 
+# Resolve model files relative to this file: backend/models/
+_MODELS_DIR = Path(__file__).resolve().parent.parent / "models"
+_HAND_MODEL  = str(_MODELS_DIR / "hand_landmarker.task")
+_POSE_MODEL  = str(_MODELS_DIR / "pose_landmarker_lite.task")
+
 
 def _cv2():
     try:
@@ -30,15 +36,6 @@ def _cv2():
     except Exception as e:
         raise RuntimeError(
             "OpenCV not available. Install opencv-python-headless."
-        ) from e
-
-def _mp():
-    try:
-        import mediapipe as mp
-        return mp
-    except Exception as e:
-        raise RuntimeError(
-            "MediaPipe not available. Install mediapipe.", e
         ) from e
 
 
@@ -85,60 +82,102 @@ def _save_frames_to_mp4(frames: List[np.ndarray], fps: float = 30.0) -> str:
     return filename
 
 
-# ============ MediaPipe extractor ============
+# ============ MediaPipe extractor (Tasks API — mediapipe >= 0.10) ============
 class MPExtractor:
-    """Create once per WebSocket connection to reuse Mediapipe graph."""
+    """Create once per WebSocket connection. Uses the MediaPipe Tasks API."""
+
     def __init__(self, model: str = "hands"):
         self.model = model
-        mp = _mp()
+        import mediapipe as mp
+        import mediapipe.tasks as mp_tasks
+        vision = mp_tasks.vision
+
         if model == "hands":
-            self.solution = mp.solutions.hands.Hands(
-                static_image_mode=False, max_num_hands=2,
-                min_detection_confidence=0.5, min_tracking_confidence=0.5
-            )
-        elif model == "pose":
-            self.solution = mp.solutions.pose.Pose(
-                static_image_mode=False,
-                model_complexity=1,
-                enable_segmentation=False,
-                min_detection_confidence=0.5,
+            if not Path(_HAND_MODEL).exists():
+                raise FileNotFoundError(
+                    f"Hand landmarker model not found at {_HAND_MODEL}. "
+                    "Run: curl -L https://storage.googleapis.com/mediapipe-models/"
+                    "hand_landmarker/hand_landmarker/float16/latest/hand_landmarker.task "
+                    f"-o {_HAND_MODEL}"
+                )
+            options = vision.HandLandmarkerOptions(
+                base_options=mp_tasks.BaseOptions(model_asset_path=_HAND_MODEL),
+                running_mode=vision.RunningMode.IMAGE,
+                num_hands=2,
+                min_hand_detection_confidence=0.5,
+                min_hand_presence_confidence=0.5,
                 min_tracking_confidence=0.5,
             )
+            self.solution = vision.HandLandmarker.create_from_options(options)
+
+        elif model == "pose":
+            if not Path(_POSE_MODEL).exists():
+                raise FileNotFoundError(
+                    f"Pose landmarker model not found at {_POSE_MODEL}. "
+                    "Run: curl -L https://storage.googleapis.com/mediapipe-models/"
+                    "pose_landmarker/pose_landmarker_lite/float16/latest/pose_landmarker_lite.task "
+                    f"-o {_POSE_MODEL}"
+                )
+            options = vision.PoseLandmarkerOptions(
+                base_options=mp_tasks.BaseOptions(model_asset_path=_POSE_MODEL),
+                running_mode=vision.RunningMode.IMAGE,
+                num_poses=1,
+                min_pose_detection_confidence=0.5,
+                min_pose_presence_confidence=0.5,
+                min_tracking_confidence=0.5,
+            )
+            self.solution = vision.PoseLandmarker.create_from_options(options)
+
         else:
             self.solution = None
 
-    def process(self, frame_bgr):
+    def process(self, frame_bgr: np.ndarray) -> dict:
         if self.solution is None:
             return {"error": f"Unsupported model {self.model}"}
+
+        import mediapipe as mp
+        import mediapipe.tasks as mp_tasks
+        vision = mp_tasks.vision
         cv2 = _cv2()
-        mp = _mp()
-        # MediaPipe expects RGB
-        results = self.solution.process(cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB))
+
+        rgb = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB)
+        mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb)
 
         if self.model == "hands":
-            out = {"model": "hands", "hands": []}
-            if getattr(results, "multi_hand_landmarks", None):
-                handed = []
-                if getattr(results, "multi_handedness", None):
-                    handed = [h.classification[0].label for h in results.multi_handedness]
-                for i, lm in enumerate(results.multi_hand_landmarks):
-                    pts = [{"x": p.x, "y": p.y, "z": p.z} for p in lm.landmark]
-                    out["hands"].append({
-                        "landmarks": pts,
-                        "handedness": handed[i] if i < len(handed) else None
-                    })
+            result = self.solution.detect(mp_image)
+            out: dict = {"model": "hands", "hands": []}
+            if result.hand_landmarks:
+                for i, hand_lm in enumerate(result.hand_landmarks):
+                    pts = [{"x": lm.x, "y": lm.y, "z": lm.z} for lm in hand_lm]
+                    handedness = None
+                    if result.handedness and i < len(result.handedness):
+                        handedness = result.handedness[i][0].category_name
+                    out["hands"].append({"landmarks": pts, "handedness": handedness})
             return out
 
         elif self.model == "pose":
+            result = self.solution.detect(mp_image)
             out = {"model": "pose", "pose": []}
-            if getattr(results, "pose_landmarks", None):
-                lm = results.pose_landmarks.landmark
-                pts = [{"x": p.x, "y": p.y, "z": p.z, "v": getattr(p, "visibility", 0.0)} for p in lm]
+            if result.pose_landmarks:
+                lm_list = result.pose_landmarks[0]
+                pts = [
+                    {"x": lm.x, "y": lm.y, "z": lm.z,
+                     "v": lm.visibility if hasattr(lm, "visibility") else 0.0}
+                    for lm in lm_list
+                ]
                 out["pose"] = pts
             return out
 
         return {"error": "Unknown model"}
-    
+
+    def close(self) -> None:
+        if self.solution is not None:
+            try:
+                self.solution.close()
+            except Exception:
+                pass
+            self.solution = None
+
 
 
 
@@ -286,6 +325,9 @@ async def _camera_ws_handler(websocket: WebSocket):
             await websocket.send_json({"type": "error", "message": str(e)})
         except:
             pass
+    finally:
+        if mp_extractor is not None:
+            mp_extractor.close()
 
 
 # Primary WS endpoint: ws://.../ws/{client_id}

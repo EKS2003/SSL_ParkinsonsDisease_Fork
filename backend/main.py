@@ -10,6 +10,7 @@ import uvicorn
 from routes.dtw_rest import router as dtw_router
 from routes.patient import router as patient_router
 from routes.websockets import router as ws_router
+from routes.classifier import router as classifier_router
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from repo.sql_models import User
 from repo.db import engine
@@ -33,6 +34,7 @@ app = FastAPI(title="Patient Management API")
 app.include_router(dtw_router)
 app.include_router(patient_router)
 app.include_router(ws_router)
+app.include_router(classifier_router)
 
 # ============ CORS ============
 app.add_middleware(

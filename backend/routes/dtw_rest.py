@@ -3,8 +3,11 @@ from __future__ import annotations
 from typing import List, Dict, Any, Tuple, Optional
 from pathlib import Path
 import json
+import shutil
+from datetime import datetime, timezone
 import numpy as np
 from fastapi import APIRouter, HTTPException, Query
+from pydantic import BaseModel, Field, field_validator
 
 router = APIRouter(prefix="/dtw", tags=["dtw"])
 
@@ -81,6 +84,17 @@ def list_tests() -> List[str]:
     if not DTW_BASE.exists():
         return []
     return sorted([d.name for d in DTW_BASE.iterdir() if d.is_dir()])
+
+@router.get("/sessions/lookup/{session_id}")
+def lookup_session(session_id: str) -> Dict[str, str]:
+    if not DTW_BASE.exists():
+        raise HTTPException(404, "DTW base not found")
+    for t in DTW_BASE.iterdir():
+        if not t.is_dir():
+            continue
+        if (t / session_id).is_dir():
+            return {"testName": t.name, "sessionId": session_id}
+    raise HTTPException(404, {"error": str(DTW_BASE)})
 
 @router.get("/sessions/{test_name}")
 def list_sessions(test_name: str) -> List[Dict[str, Any]]:
@@ -199,17 +213,6 @@ def download_paths(test_name: str, session_id: str) -> Dict[str, str]:
         "npz": str(folder / "dtw_artifacts.npz"),
         "meta": str(folder / "meta.json"),
     }
-
-@router.get("/sessions/lookup/{session_id}")
-def lookup_session(session_id: str) -> Dict[str, str]:
-    if not DTW_BASE.exists():
-        raise HTTPException(404, "DTW base not found")
-    for t in DTW_BASE.iterdir():
-        if not t.is_dir():
-            continue
-        if (t / session_id).is_dir():
-            return {"testName": t.name, "sessionId": session_id}
-    raise HTTPException(404, {"error": str(DTW_BASE)})
 
 def _infer_points_and_kpp(D: int, model: str) -> Tuple[int, int]:
     """
@@ -439,4 +442,105 @@ def get_axis_aggregate(
             "i": [int(v) for v in i_idx_ds],
             "j": [int(v) for v in j_idx_ds],
         }
+    }
+
+# ─────────────────────────── Doctor label endpoint ───────────────────────────
+
+class LabelSessionRequest(BaseModel):
+    confirmed_stage: int = Field(
+        ...,
+        ge=1,
+        le=5,
+        description="Doctor-confirmed UPDRS stage (1–5).",
+    )
+    patient_id: str | None = Field(
+        None,
+        description="If provided, updates the patient's severity field to this stage.",
+    )
+    notes: str | None = Field(
+        None,
+        max_length=1000,
+        description="Optional free-text note from the reviewing clinician.",
+    )
+
+    @field_validator("confirmed_stage")
+    @classmethod
+    def stage_in_range(cls, v: int) -> int:
+        if not (1 <= v <= 5):
+            raise ValueError("confirmed_stage must be between 1 and 5")
+        return v
+
+
+@router.patch(
+    "/sessions/{test_name}/{session_id}/label",
+    summary="Doctor confirms or corrects the AI-predicted UPDRS stage",
+)
+async def label_session(
+    test_name: str,
+    session_id: str,
+    body: LabelSessionRequest,
+) -> Dict[str, Any]:
+    folder = _session_dir(test_name, session_id)
+    meta_path = folder / "meta.json"
+
+    try:
+        meta: dict = json.loads(meta_path.read_text())
+    except Exception as e:
+        raise HTTPException(500, f"Could not read meta.json: {e}")
+
+    meta["doctor_confirmed_stage"] = body.confirmed_stage
+    meta["doctor_label_utc"] = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    if body.notes:
+        meta["doctor_notes"] = body.notes
+
+    ml_stage = meta.get("ml_predicted_stage")
+    was_corrected = ml_stage is not None and int(ml_stage) != body.confirmed_stage
+    meta["label_source"] = "doctor_correction" if was_corrected else "doctor_confirmed"
+
+    meta_path.write_text(json.dumps(meta, indent=2))
+
+    # Archive for future training
+    training_dir = (
+        DTW_BASE.parent
+        / "_labelled_training_data"
+        / test_name
+        / f"stage_{body.confirmed_stage}"
+        / session_id
+    )
+    training_dir.mkdir(parents=True, exist_ok=True)
+    for src in folder.iterdir():
+        dst = training_dir / src.name
+        if not dst.exists():
+            shutil.copy2(src, dst)
+
+    # Optionally update patient severity
+    patient_updated = False
+    if body.patient_id:
+        try:
+            from patient_manager import async_update_patient_info
+            from routes.contracts import PatientUpdate
+            severity_str = f"Stage {body.confirmed_stage}"
+            result = await async_update_patient_info(
+                body.patient_id,
+                PatientUpdate(severity=severity_str),
+            )
+            patient_updated = result.get("success", False)
+        except Exception as e:
+            return {
+                "ok": True,
+                "session_id": session_id,
+                "confirmed_stage": body.confirmed_stage,
+                "label_source": meta["label_source"],
+                "training_copy": str(training_dir),
+                "patient_updated": False,
+                "patient_update_error": str(e),
+            }
+
+    return {
+        "ok": True,
+        "session_id": session_id,
+        "confirmed_stage": body.confirmed_stage,
+        "label_source": meta["label_source"],
+        "training_copy": str(training_dir),
+        "patient_updated": patient_updated,
     }

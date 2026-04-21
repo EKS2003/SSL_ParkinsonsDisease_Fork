@@ -6,12 +6,25 @@ import {
   Download,
   Calendar,
   TrendingUp,
-  FileText,
   BarChart3,
+  AlertTriangle,
+  Brain,
+  CheckCircle2,
+  Pencil,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
@@ -72,14 +85,20 @@ type AxisAggResponse = {
   warped: { k: number[]; live: number[]; ref: number[] };
 };
 
+type MlPrediction = {
+  predicted_updrs_stage: number;
+  severity: string;
+  confidence: number;
+  probabilities: Record<string, number>;
+};
+
 type DtwSeriesCurve = {
   local_cost_path: { x: number[]; y: number[] };
   cumulative_progress: { x: number[]; y: number[] };
   alignment_map: { x: number[]; y: number[] };
 };
 
-type DtwSeriesMetrics = {
-  ok: boolean;
+type DtwSeriesMetrics = {  ok: boolean;
 
   // New distance / similarity fields from backend
   distance_pos?: number;
@@ -137,17 +156,6 @@ const mockTestHistory: Test[] = [
     },
   },
 ];
-
-const mockStats = {
-  averageScore: 77,
-  improvement: "+8%",
-  totalTests: 12,
-  averageDuration: "42s",
-  tremor: "Mild",
-  balance: "Good",
-  coordination: "Moderate",
-  mobility: "Good",
-};
 
 /* ======================= Helpers ======================= */
 const canonicalTests = [
@@ -557,6 +565,18 @@ const VideoSummary = () => {
   const [metricsLoading, setMetricsLoading] = useState(false);
   const [metricsErr, setMetricsErr] = useState<string | null>(null);
 
+  // ML stage prediction
+  const [mlPrediction, setMlPrediction] = useState<MlPrediction | null>(null);
+  const [mlLoading, setMlLoading] = useState(false);
+  const [mlErr, setMlErr] = useState<string | null>(null);
+
+  // Doctor confirm/adjust dialog
+  const [labelDialogOpen, setLabelDialogOpen] = useState(false);
+  const [labelStage, setLabelStage] = useState<number>(1);
+  const [labelNotes, setLabelNotes] = useState("");
+  const [labelSubmitting, setLabelSubmitting] = useState(false);
+  const [labelResult, setLabelResult] = useState<{ stage: number; source: string } | null>(null);
+
   const currentTest =
     testHistory.find((t) => t.type === testId) || testHistory[0];
   const filteredHistory = testHistory.filter(
@@ -634,7 +654,7 @@ const VideoSummary = () => {
     (async () => {
       try {
         const data = await fetchJSON<{ success: boolean; videos: string[] }>(
-          `/videos/${encodeURIComponent(id)}/${encodeURIComponent(testKey)}`,
+          `/api/videos/${encodeURIComponent(id)}/${encodeURIComponent(testKey)}`,
           ctrl.signal
         );
         console.log("Videos API response:", data);
@@ -700,6 +720,33 @@ const VideoSummary = () => {
         setMetricsErr(e?.message || "Failed to load DTW metrics");
       } finally {
         setMetricsLoading(false);
+      }
+    })();
+    return () => ctrl.abort();
+  }, [testKey, sessionId]);
+
+  // Fetch ML UPDRS stage prediction from saved DTW session
+  useEffect(() => {
+    if (!testKey || !sessionId) {
+      setMlPrediction(null);
+      setMlErr(null);
+      return;
+    }
+    const ctrl = new AbortController();
+    (async () => {
+      try {
+        setMlLoading(true);
+        setMlErr(null);
+        const data = await fetchJSON<MlPrediction>(
+          `/api/ml/updrs/from_session/${encodeURIComponent(testKey)}/${encodeURIComponent(sessionId)}`,
+          ctrl.signal
+        );
+        setMlPrediction(data);
+      } catch (e: any) {
+        setMlPrediction(null);
+        setMlErr(e?.message || "ML prediction unavailable");
+      } finally {
+        setMlLoading(false);
       }
     })();
     return () => ctrl.abort();
@@ -894,37 +941,320 @@ const VideoSummary = () => {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Metric</TableHead>
-                    <TableHead>Value</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  <TableRow>
-                    <TableCell>Overall Score</TableCell>
-                    <TableCell>{currentTest?.results?.score}</TableCell>
-                  </TableRow>
-                  <TableRow>
-                    <TableCell>Average Duration</TableCell>
-                    <TableCell>{mockStats.averageDuration}</TableCell>
-                  </TableRow>
-                  <TableRow>
-                    <TableCell>Tremor</TableCell>
-                    <TableCell>{mockStats.tremor}</TableCell>
-                  </TableRow>
-                </TableBody>
-              </Table>
-              <div className="mt-4 p-3 bg-muted rounded-lg">
-                <FileText className="inline mr-2 text-primary" />
-                <span className="text-sm">
-                  {currentTest?.results?.analysis}
-                </span>
-              </div>
+              {metricsLoading ? (
+                <p className="text-sm text-muted-foreground">Loading metrics…</p>
+              ) : metricsErr ? (
+                <p className="text-sm text-red-600">{metricsErr}</p>
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Metric</TableHead>
+                      <TableHead>Value</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    <TableRow>
+                      <TableCell>Overall Similarity</TableCell>
+                      <TableCell>
+                        {metrics?.similarity_overall != null
+                          ? `${(metrics.similarity_overall * 100).toFixed(1)}%`
+                          : "—"}
+                      </TableCell>
+                    </TableRow>
+                    <TableRow>
+                      <TableCell>Position Similarity</TableCell>
+                      <TableCell>
+                        {metrics?.similarity_pos != null
+                          ? `${(metrics.similarity_pos * 100).toFixed(1)}%`
+                          : "—"}
+                      </TableCell>
+                    </TableRow>
+                    <TableRow>
+                      <TableCell>Amplitude Similarity</TableCell>
+                      <TableCell>
+                        {metrics?.similarity_amp != null
+                          ? `${(metrics.similarity_amp * 100).toFixed(1)}%`
+                          : "—"}
+                      </TableCell>
+                    </TableRow>
+                    <TableRow>
+                      <TableCell>Speed Similarity</TableCell>
+                      <TableCell>
+                        {metrics?.similarity_spd != null
+                          ? `${(metrics.similarity_spd * 100).toFixed(1)}%`
+                          : "—"}
+                      </TableCell>
+                    </TableRow>
+                    <TableRow>
+                      <TableCell>Positional DTW Distance</TableCell>
+                      <TableCell>
+                        {metrics?.distance_pos != null
+                          ? metrics.distance_pos.toFixed(3)
+                          : "—"}
+                      </TableCell>
+                    </TableRow>
+                    <TableRow>
+                      <TableCell>Avg. Step Cost</TableCell>
+                      <TableCell>
+                        {metrics?.avg_step_pos != null
+                          ? metrics.avg_step_pos.toFixed(4)
+                          : "—"}
+                      </TableCell>
+                    </TableRow>
+                    <TableRow>
+                      <TableCell>Live Frames</TableCell>
+                      <TableCell>
+                        {sessions.find((s) => s.session_id === sessionId)?.live_len ?? "—"}
+                      </TableCell>
+                    </TableRow>
+                    <TableRow>
+                      <TableCell>Reference Frames</TableCell>
+                      <TableCell>
+                        {sessions.find((s) => s.session_id === sessionId)?.ref_len ?? "—"}
+                      </TableCell>
+                    </TableRow>
+                  </TableBody>
+                </Table>
+              )}
             </CardContent>
           </Card>
         </div>
+
+        {/* ====== ML UPDRS Stage Prediction ====== */}
+        <div className="col-span-12">
+          <Card className="border-2 border-amber-200 dark:border-amber-800">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Brain className="h-5 w-5 text-amber-600 dark:text-amber-400" />
+                AI-Predicted UPDRS Motor Stage
+              </CardTitle>
+              {/* Prominent disclaimer */}
+              <div className="flex items-start gap-2 rounded-md border border-amber-300 bg-amber-50 p-3 text-sm dark:border-amber-700 dark:bg-amber-950">
+                <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />
+                <span className="text-amber-800 dark:text-amber-300">
+                  <strong>This is an AI model estimate and may be incorrect.</strong> It was
+                  trained on a limited dataset and reliably predicts only UPDRS stages&nbsp;1–3.
+                  Stage&nbsp;0 predictions are experimental. Do not use this result as a clinical
+                  diagnosis. Always consult a qualified clinician.
+                </span>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {mlLoading ? (
+                <p className="text-sm text-muted-foreground">Running model…</p>
+              ) : mlErr ? (
+                <p className="text-sm text-red-600">{mlErr}</p>
+              ) : !mlPrediction ? (
+                <p className="text-sm text-muted-foreground">
+                  Select a test and session above to run the prediction.
+                </p>
+              ) : (
+                <div className="space-y-5">
+                  {/* Main result banner */}
+                  <div className="flex flex-col items-center gap-1 rounded-lg bg-muted py-6">
+                    <p className="text-xs font-medium uppercase tracking-widest text-muted-foreground">
+                      Predicted Stage
+                    </p>
+                    <p className="text-5xl font-bold text-amber-700 dark:text-amber-400">
+                      {mlPrediction.severity}
+                    </p>
+                    <p className="text-sm text-muted-foreground">
+                      Confidence:{" "}
+                      <span className="font-medium">
+                        {(mlPrediction.confidence * 100).toFixed(1)}%
+                      </span>
+                    </p>
+                  </div>
+
+                  {/* Per-class probabilities */}
+                  <div>
+                    <p className="mb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                      Class Probabilities
+                    </p>
+                    <div className="space-y-2">
+                      {Object.entries(mlPrediction.probabilities)
+                        .sort(([a], [b]) => Number(a) - Number(b))
+                        .map(([stage, prob]) => {
+                          const pct = (prob * 100).toFixed(1);
+                          const isTop =
+                            Number(stage) === mlPrediction.predicted_updrs_stage;
+                          return (
+                            <div key={stage} className="flex items-center gap-3">
+                              <span className="w-16 shrink-0 text-xs text-muted-foreground">
+                                Stage {stage}
+                              </span>
+                              <div className="flex-1 overflow-hidden rounded-full bg-muted">
+                                <div
+                                  className={`h-2 rounded-full transition-all ${
+                                    isTop
+                                      ? "bg-amber-500"
+                                      : "bg-slate-400 dark:bg-slate-600"
+                                  }`}
+                                  style={{ width: `${pct}%` }}
+                                />
+                              </div>
+                              <span
+                                className={`w-12 text-right text-xs tabular-nums ${
+                                  isTop
+                                    ? "font-semibold text-amber-700 dark:text-amber-400"
+                                    : "text-muted-foreground"
+                                }`}
+                              >
+                                {pct}%
+                              </span>
+                            </div>
+                          );
+                        })}
+                    </div>
+                  </div>
+
+                  {/* Confirm / Adjust button — only when a prediction exists */}
+                  {mlPrediction && testKey && sessionId && (
+                    <div className="flex items-center justify-end pt-2">
+                      {labelResult ? (
+                        <div className="flex items-center gap-2 rounded-md border border-green-300 bg-green-50 px-4 py-2 text-sm text-green-800 dark:border-green-700 dark:bg-green-950 dark:text-green-300">
+                          <CheckCircle2 className="h-4 w-4" />
+                          Stage {labelResult.stage} confirmed
+                          {labelResult.source === "doctor_correction" ? " (corrected)" : ""} and saved for training.
+                        </div>
+                      ) : (
+                        <Button
+                          variant="outline"
+                          className="gap-2 border-amber-400 text-amber-700 hover:bg-amber-50 dark:border-amber-600 dark:text-amber-400"
+                          onClick={() => {
+                            setLabelStage(mlPrediction.predicted_updrs_stage + 1);
+                            setLabelNotes("");
+                            setLabelDialogOpen(true);
+                          }}
+                        >
+                          <Pencil className="h-4 w-4" />
+                          Confirm / Adjust Stage
+                        </Button>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* ====== Confirm / Adjust Stage Dialog ====== */}
+        <Dialog open={labelDialogOpen} onOpenChange={setLabelDialogOpen}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <Brain className="h-5 w-5 text-amber-600" />
+                Confirm or Adjust AI-Predicted Stage
+              </DialogTitle>
+              <DialogDescription className="text-sm text-muted-foreground">
+                Review the model's suggestion and select the clinically correct
+                UPDRS stage. Your selection will update the patient record and
+                be saved as labelled training data to improve the model over
+                time.
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="space-y-4 py-2">
+              {/* AI suggestion reminder */}
+              {mlPrediction && (
+                <div className="rounded-md border bg-muted/50 px-4 py-2 text-sm">
+                  <span className="text-muted-foreground">AI suggested: </span>
+                  <span className="font-semibold">{mlPrediction.severity}</span>
+                  <span className="text-muted-foreground ml-2">
+                    ({(mlPrediction.confidence * 100).toFixed(1)}% confidence)
+                  </span>
+                </div>
+              )}
+
+              {/* Stage selector */}
+              <div className="space-y-1.5">
+                <Label htmlFor="stage-select">Confirmed UPDRS Stage</Label>
+                <Select
+                  value={String(labelStage)}
+                  onValueChange={(v) => setLabelStage(Number(v))}
+                >
+                  <SelectTrigger id="stage-select">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {[1, 2, 3, 4, 5].map((s) => (
+                      <SelectItem key={s} value={String(s)}>
+                        Stage {s}
+                        {mlPrediction && s === mlPrediction.predicted_updrs_stage + 1
+                          ? " (AI suggested)"
+                          : ""}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Optional notes */}
+              <div className="space-y-1.5">
+                <Label htmlFor="label-notes">
+                  Clinical notes{" "}
+                  <span className="font-normal text-muted-foreground">(optional)</span>
+                </Label>
+                <Textarea
+                  id="label-notes"
+                  placeholder="e.g. Patient showed mild tremor, AI over-estimated severity…"
+                  rows={3}
+                  value={labelNotes}
+                  onChange={(e) => setLabelNotes(e.target.value)}
+                />
+              </div>
+
+              {/* Disclaimer */}
+              <p className="text-xs text-muted-foreground">
+                This action will update the patient's severity record and
+                archive this session as labelled training data.
+              </p>
+            </div>
+
+            <DialogFooter className="gap-2">
+              <Button
+                variant="outline"
+                onClick={() => setLabelDialogOpen(false)}
+                disabled={labelSubmitting}
+              >
+                Cancel
+              </Button>
+              <Button
+                disabled={labelSubmitting || !testKey || !sessionId}
+                onClick={async () => {
+                  if (!testKey || !sessionId) return;
+                  setLabelSubmitting(true);
+                  try {
+                    const res = await fetch(
+                      `/api/dtw/sessions/${encodeURIComponent(testKey)}/${encodeURIComponent(sessionId)}/label`,
+                      {
+                        method: "PATCH",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                          confirmed_stage: labelStage,
+                          patient_id: id ?? null,
+                          notes: labelNotes.trim() || null,
+                        }),
+                      }
+                    );
+                    const json = await res.json();
+                    if (!res.ok) throw new Error(json?.detail || "Server error");
+                    setLabelResult({ stage: labelStage, source: json.label_source });
+                    setLabelDialogOpen(false);
+                  } catch (e: any) {
+                    alert(`Failed to save label: ${e?.message ?? e}`);
+                  } finally {
+                    setLabelSubmitting(false);
+                  }
+                }}
+              >
+                {labelSubmitting ? "Saving…" : "Confirm Stage"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
 
         {/* ====== Bottom row: Full-width DTW card with KPIs ====== */}
         <div className="col-span-12">

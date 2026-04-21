@@ -390,7 +390,7 @@ async def async_get_all_patients_info(skip: int = 0, limit: int = 100) -> Dict[s
     async with _async_lock:
         return get_all_patients_info(skip=skip, limit=limit)
 
-async def async_update_patient_info(patient_id: str, updated_data: Dict[str, Any]) -> Dict[str, Any]:
+async def async_update_patient_info(patient_id: str, updated_data: PatientUpdate) -> Dict[str, Any]:
     async with _async_lock:
         return update_patient_info(patient_id, updated_data)
 

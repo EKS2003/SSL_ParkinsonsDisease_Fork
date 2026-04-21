@@ -1,6 +1,6 @@
 import { AVAILABLE_TESTS, Test, TestIndicator } from '@/types/patient';
 
-const API_BASE_URL = 'http://localhost:8000'; //not using docker if you are swich back to 8000
+const API_BASE_URL = '/api'; // routed through Vite proxy (/api → backend root); works locally and in Docker
 
 type TestType = Test['type'];
 type TestStatus = Test['status'];
@@ -161,12 +161,32 @@ interface BackendPatientUpdate {
   name?: string;
   age?: number;
   birthDate?: string;
-  age?: number;
+  // age?: number;
   height?: string;
   weight?: string;
   severity?: string;
   lab_results_history?: BackendLabResultEntry[];
   doctors_notes_history?: BackendDoctorNoteEntry[];
+}
+
+interface BackendSeverityPrediction {
+  predicted_updrs_stage: number;
+  probabilities: Record<string, number>;
+  severity: string;
+  severity_stage: number;
+  prediction: string;
+  confidence: number;
+  lstm_output: number[];
+  logits: number[];
+  n_windows: number;
+  window_size: number;
+  stride: number;
+  model_version: string;
+  preprocessing_version: string;
+  checkpoint_path: string;
+  attention_weights?: number[] | null;
+  patient_id: string;
+  patient_updated: boolean;
 }
 
 interface ApiResponse<T> {
@@ -780,6 +800,26 @@ class ApiService {
       }
     );
     return response;
+  }
+
+  async predictAndUpdateSeverity(
+    patientId: string,
+    sequence: number[][],
+    options?: { returnAttention?: boolean; persistUpdate?: boolean }
+  ): Promise<ApiResponse<BackendSeverityPrediction>> {
+    const returnAttention = options?.returnAttention ?? false;
+    const persistUpdate = options?.persistUpdate ?? true;
+    const endpoint = `/ml/updrs/predict/patients/${encodeURIComponent(
+      patientId
+    )}?persist_update=${persistUpdate}`;
+
+    return await this.request<BackendSeverityPrediction>(endpoint, {
+      method: "POST",
+      body: JSON.stringify({
+        sequence,
+        return_attention: returnAttention,
+      }),
+    });
   }
 }
 

@@ -459,6 +459,48 @@
       "date": "2025-12-19T21:53:51.441449",
       "recording_file": "ws_recording_2025-12-19_16-53-50_09e045e8-b3ab-473f-a313-9b2c83c42821.mp4",
       "frame_count": 230
+    },
+    {
+      "test_name": "finger-tapping",
+      "date": "2026-04-21T06:23:42.496668",
+      "recording_file": "ws_recording_2026-04-21_02-23-42_244f0c60-09c3-4ff7-8b45-5cdaa2d0cc22.mp4",
+      "frame_count": 187
+    }
+  ],
+  "micha1763750892": [
+    {
+      "test_name": "finger-tapping",
+      "date": "2026-04-20T22:53:13.473668",
+      "recording_file": "ws_recording_2026-04-20_18-53-13_f284716c-f770-4491-8936-f2bcf39f49ad.mp4",
+      "frame_count": 186
+    },
+    {
+      "test_name": "finger-tapping",
+      "date": "2026-04-21T06:08:49.497143",
+      "recording_file": "ws_recording_2026-04-21_02-08-49_989fe32f-99ab-4be7-b4eb-28eaf01355a6.mp4",
+      "frame_count": 293
+    }
+  ],
+  "emily1763750892": [
+    {
+      "test_name": "finger-tapping",
+      "date": "2026-04-20T23:09:40.750622",
+      "recording_file": "ws_recording_2026-04-20_19-09-40_c9df8fe2-2255-4f87-bf12-8d76beb939ff.mp4",
+      "frame_count": 177
+    }
+  ],
+  "carlo1776752395": [
+    {
+      "test_name": "finger-tapping",
+      "date": "2026-04-21T06:20:32.254704",
+      "recording_file": "ws_recording_2026-04-21_02-20-31_747cad8e-a55b-484d-979b-f009747bafa7.mp4",
+      "frame_count": 216
+    },
+    {
+      "test_name": "finger-tapping",
+      "date": "2026-04-21T06:32:50.817284",
+      "recording_file": "ws_recording_2026-04-21_02-32-50_a2ae1552-c687-44f1-ad58-619f716dcc68.mp4",
+      "frame_count": 194
     }
   ]
 }
