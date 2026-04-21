@@ -76,6 +76,8 @@ settings = Settings()
 
 All hardcoded values in `auth.py` (`SECRET_KEY`, `ACCESS_MIN`) and `patient_manager.py` (`DB_URL`) are replaced with `settings.*` references.
 
+`pydantic-settings` must be added to `requirements.txt` — it is a separate package from `pydantic` in Pydantic v2.
+
 ---
 
 ## 3. Error Handling
@@ -122,7 +124,9 @@ def get_test_history_service(db: Session = Depends(get_db)) -> TestHistoryServic
     return TestHistoryService(db)
 
 def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)) -> User:
-    # auth logic moved here from auth.py
+    # decodes JWT, looks up user in DB, raises 401 on failure
+    # authenticate() and create_access_token() stay in auth.py
+    # only get_current_user moves here to break the import cycle
     ...
 ```
 
