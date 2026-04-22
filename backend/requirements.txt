@@ -39,6 +39,7 @@ protobuf==4.25.8
 pyasn1==0.6.1
 pycparser==2.23
 pydantic==2.12.3
+pydantic-settings==2.7.1
 pydantic_core==2.41.4
 pyparsing==3.2.5
 python-dateutil==2.9.0.post0
@@ -59,9 +60,7 @@ threadpoolctl==3.6.0
 tslearn==0.6.4
 typing-inspection==0.4.2
 typing_extensions==4.15.0
-torch==2.5.1
 ultralytics
 uvicorn==0.38.0
 watchfiles==1.1.1
 websockets==15.0.1
-numpy
