@@ -1,7 +1,9 @@
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
+    model_config = SettingsConfigDict(env_file=".env")
+
     db_url: str = "sqlite:///./app.db"
     secret_key: str = "change-me-in-production"
     access_token_expire_minutes: int = 30
@@ -18,9 +20,6 @@ class Settings(BaseSettings):
         "http://127.0.0.1:8000",
         "http://127.0.0.1:8080",
     ]
-
-    class Config:
-        env_file = ".env"
 
 
 settings = Settings()
