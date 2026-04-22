@@ -1,22 +1,15 @@
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
-from fastapi.responses import HTMLResponse
-
+from fastapi import Depends, WebSocket, WebSocketDisconnect, APIRouter
 import os
 import base64
 import json
 from datetime import datetime
 from pathlib import Path
 import uuid
-
-
 import numpy as np
 from typing import List, Optional, Dict
 from routes.utils_dtw import EndOnlyDTW, normalize_test_name
-
-from patient_manager import (
-    TestHistoryManager
-)
-from fastapi import APIRouter
+from core.dependencies import get_test_history_service
+from services.test_history_service import TestHistoryService
 
 router = APIRouter(prefix="/ws", tags=["websockets"])
 
@@ -182,7 +175,7 @@ class MPExtractor:
 
 
 # ============ WebSocket handler ============
-async def _camera_ws_handler(websocket: WebSocket):
+async def _camera_ws_handler(websocket: WebSocket, test_history: TestHistoryService):
     await websocket.accept()
 
     frames: List[np.ndarray] = []
@@ -295,12 +288,11 @@ async def _camera_ws_handler(websocket: WebSocket):
                     continue
 
                 try:
-                    thm = TestHistoryManager()
-                    thm.add_patient_test(patient_id or "unknown", {
+                    test_history.add_patient_test(patient_id or "unknown", {
                         "test_name": test_name or "unknown",
-                        "date": datetime.utcnow().isoformat(),
+                        "date": datetime.utcnow(),
                         "recording_file": saved_name,
-                        "frame_count": len(frames)
+                        "frame_count": len(frames),
                     })
                 except Exception:
                     pass
@@ -332,12 +324,20 @@ async def _camera_ws_handler(websocket: WebSocket):
 
 # Primary WS endpoint: ws://.../ws/{client_id}
 @router.websocket("/{client_id}")
-async def ws_client(websocket: WebSocket, client_id: str):
-    await _camera_ws_handler(websocket)
+async def ws_client(
+    websocket: WebSocket,
+    client_id: str,
+    test_history: TestHistoryService = Depends(get_test_history_service),
+):
+    await _camera_ws_handler(websocket, test_history)
+
 
 @router.websocket("/camera")
-async def ws_camera(websocket: WebSocket):
-    await _camera_ws_handler(websocket)
+async def ws_camera(
+    websocket: WebSocket,
+    test_history: TestHistoryService = Depends(get_test_history_service),
+):
+    await _camera_ws_handler(websocket, test_history)
 
 @router.get("/test")
 async def test_ws():

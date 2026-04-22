@@ -2,16 +2,19 @@ from __future__ import annotations
 
 from pathlib import Path
 import sys
+from unittest.mock import MagicMock
 
 from fastapi.testclient import TestClient
 
-# Ensure backend imports work whether pytest is run from repo root or backend dir.
 BACKEND_DIR = Path(__file__).resolve().parents[1]
 if str(BACKEND_DIR) not in sys.path:
     sys.path.insert(0, str(BACKEND_DIR))
 
 import routes.classifier as classifier_routes
 from main import app
+from core.dependencies import get_patient_service
+from core.exceptions import PatientNotFoundError
+from routes.contracts import PatientUpdate
 
 
 def _valid_payload() -> dict:
@@ -45,37 +48,43 @@ def test_predict_and_update_success(monkeypatch):
     def fake_predict(sequence, return_attention=False):
         return _mock_prediction()
 
-    async def fake_update(patient_id, updated_data):
-        return {"success": True, "patient_id": patient_id}
-
     monkeypatch.setattr(classifier_routes.inference_service, "predict", fake_predict)
-    monkeypatch.setattr(classifier_routes, "async_update_patient_info", fake_update)
 
-    client = TestClient(app)
-    response = client.post("/ml/updrs/predict/patients/patient123", json=_valid_payload())
+    mock_service = MagicMock()
+    mock_service.update_patient.return_value = None
+    app.dependency_overrides[get_patient_service] = lambda: mock_service
 
-    assert response.status_code == 200
-    body = response.json()
-    assert body["patient_id"] == "patient123"
-    assert body["patient_updated"] is True
-    assert body["severity"] == "Stage 3"
+    try:
+        client = TestClient(app)
+        response = client.post("/ml/updrs/predict/patients/patient123", json=_valid_payload())
+
+        assert response.status_code == 200
+        body = response.json()
+        assert body["patient_id"] == "patient123"
+        assert body["patient_updated"] is True
+        assert body["severity"] == "Stage 3"
+        mock_service.update_patient.assert_called_once()
+    finally:
+        app.dependency_overrides.pop(get_patient_service, None)
 
 
 def test_predict_and_update_unknown_patient_returns_404(monkeypatch):
     def fake_predict(sequence, return_attention=False):
         return _mock_prediction()
 
-    async def fake_update(patient_id, updated_data):
-        return {"success": False, "error": "Patient not found"}
-
     monkeypatch.setattr(classifier_routes.inference_service, "predict", fake_predict)
-    monkeypatch.setattr(classifier_routes, "async_update_patient_info", fake_update)
 
-    client = TestClient(app)
-    response = client.post("/ml/updrs/predict/patients/unknown", json=_valid_payload())
+    mock_service = MagicMock()
+    mock_service.update_patient.side_effect = PatientNotFoundError("unknown")
+    app.dependency_overrides[get_patient_service] = lambda: mock_service
 
-    assert response.status_code == 404
-    assert response.json()["detail"] == "Patient not found"
+    try:
+        client = TestClient(app)
+        response = client.post("/ml/updrs/predict/patients/unknown", json=_valid_payload())
+
+        assert response.status_code == 404
+    finally:
+        app.dependency_overrides.pop(get_patient_service, None)
 
 
 def test_predict_and_update_bad_inference_returns_400(monkeypatch):
@@ -95,28 +104,31 @@ def test_predict_only_mode_with_unknown_patient_returns_200(monkeypatch):
     def fake_predict(sequence, return_attention=False):
         return _mock_prediction()
 
-    async def fake_update(patient_id, updated_data):
-        raise AssertionError("update should not be called when persist_update=false")
-
     monkeypatch.setattr(classifier_routes.inference_service, "predict", fake_predict)
-    monkeypatch.setattr(classifier_routes, "async_update_patient_info", fake_update)
 
-    client = TestClient(app)
-    response = client.post(
-        "/ml/updrs/predict/patients/unknown?persist_update=false",
-        json=_valid_payload(),
-    )
+    mock_service = MagicMock()
+    app.dependency_overrides[get_patient_service] = lambda: mock_service
 
-    assert response.status_code == 200
-    body = response.json()
-    assert body["patient_id"] == "unknown"
-    assert body["patient_updated"] is False
+    try:
+        client = TestClient(app)
+        response = client.post(
+            "/ml/updrs/predict/patients/unknown?persist_update=false",
+            json=_valid_payload(),
+        )
+
+        assert response.status_code == 200
+        body = response.json()
+        assert body["patient_id"] == "unknown"
+        assert body["patient_updated"] is False
+        mock_service.update_patient.assert_not_called()
+    finally:
+        app.dependency_overrides.pop(get_patient_service, None)
 
 
 def test_predict_validation_error_returns_422():
     client = TestClient(app)
     payload = {
-        "sequence": [[0.1] * 23 for _ in range(30)],  # invalid feature dim
+        "sequence": [[0.1] * 23 for _ in range(30)],
         "return_attention": False,
     }
     response = client.post("/ml/updrs/predict/patients/patient123", json=payload)

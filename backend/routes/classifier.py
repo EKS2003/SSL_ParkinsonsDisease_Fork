@@ -5,14 +5,17 @@ from pathlib import Path
 import numpy as np
 from fastapi import APIRouter, HTTPException, Query
 
-from patient_manager import async_update_patient_info
+from fastapi import Depends
 from routes.contracts import PatientUpdate
-from schema.classifier_schema import (
+from routes.classifier_schema import (
     APIErrorResponse,
     LSTMCNNPredictAndUpdateResponse,
     LSTMCNNPredictRequest,
     LSTMCNNPredictResponse,
 )
+from core.dependencies import get_patient_service
+from core.exceptions import PatientNotFoundError
+from services.patient_service import PatientService
 from services.lstm_cnn_inference import inference_service
 
 # DTW runs root — same path used by utils_dtw.py
@@ -117,6 +120,7 @@ async def predict_updrs_and_update_patient(
         default=True,
         description="When false, return prediction without updating patient severity.",
     ),
+    service: PatientService = Depends(get_patient_service),
 ) -> LSTMCNNPredictAndUpdateResponse:
     try:
         result = inference_service.predict(
@@ -126,15 +130,7 @@ async def predict_updrs_and_update_patient(
 
         patient_updated = False
         if persist_update:
-            update_result = await async_update_patient_info(
-                patient_id,
-                PatientUpdate(severity=result["severity"]),
-            )
-            if not update_result.get("success"):
-                error_detail = update_result.get("error", "Failed to update patient severity")
-                if error_detail == "Patient not found":
-                    raise HTTPException(status_code=404, detail=error_detail)
-                raise HTTPException(status_code=400, detail=error_detail)
+            service.update_patient(patient_id, PatientUpdate(severity=result["severity"]))
             patient_updated = True
 
         return LSTMCNNPredictAndUpdateResponse(
@@ -142,7 +138,7 @@ async def predict_updrs_and_update_patient(
             patient_id=patient_id,
             patient_updated=patient_updated,
         )
-    except HTTPException:
+    except (HTTPException, PatientNotFoundError):
         raise
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc

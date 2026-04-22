@@ -1,100 +1,62 @@
-from fastapi import FastAPI, HTTPException, Query, UploadFile, File, Form, Body, WebSocket, WebSocketDisconnect, Depends
+from fastapi import FastAPI, HTTPException, Body, Depends
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
-from typing import Dict, List, Optional, Annotated
-from datetime import datetime, timedelta
-import os
-import shutil
+from fastapi.responses import JSONResponse
 import uvicorn
+
+from core.config import settings
+from core.exceptions import PatientNotFoundError, PatientValidationError, DuplicatePatientError
+from core.dependencies import get_test_history_service
+from repo.db import init_db
+from services.test_history_service import TestHistoryService
 
 from routes.dtw_rest import router as dtw_router
 from routes.patient import router as patient_router
 from routes.websockets import router as ws_router
 from routes.classifier import router as classifier_router
-from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
+from routes.patient_media import router as media_router
+
+from auth import authenticate, create_access_token
 from repo.sql_models import User
-from repo.db import engine
-from jose import jwt, JWTError
-from passlib.context import CryptContext
-from patient_manager import SessionLocal
-
-# ============ Paths / Folders ============
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-RECORDINGS_DIR = os.path.join(BASE_DIR, "routes", "recordings")
-os.makedirs(RECORDINGS_DIR, exist_ok=True)
-
-# ============ Lazy imports (avoid libGL issues on boot) ============
-
-# ============ Patient Manager ============
-from patient_manager import (
-    TestHistoryManager
-)
+from fastapi.security import OAuth2PasswordRequestForm
 
 app = FastAPI(title="Patient Management API")
-app.include_router(dtw_router)
-app.include_router(patient_router)
-app.include_router(ws_router)
-app.include_router(classifier_router)
 
-# ============ CORS ============
+init_db()
+
+# ── CORS ──────────────────────────────────────────────────────────────────────
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:8000",
-        "http://localhost:8080",
-        "http://localhost:5173",
-        "http://localhost:5174",  # Add this line
-        "http://localhost:3000",
-        "http://127.0.0.1:8000",
-        "http://127.0.0.1:8080",
-        "http://127.0.0.1:5173",
-        "http://127.0.0.1:5174",  # Add this line too
-        "http://127.0.0.1:3000",
-        "http://localhost:8001",
-        "http://localhost:8000/patients",
-    ],
+    allow_origins=settings.allowed_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-SECRET_KEY = "stupid_hash_for_now"
-ALGO = "HS256"
-ACCESS_MIN = 30
+# ── Exception handlers ────────────────────────────────────────────────────────
+@app.exception_handler(PatientNotFoundError)
+async def patient_not_found_handler(request, exc: PatientNotFoundError):
+    return JSONResponse(status_code=404, content={"detail": str(exc)})
 
-pwd = CryptContext(schemes=["bcrypt"], deprecated="auto")
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
 
-def authenticate(username: str, password: str) -> User | None:
-    try:
-        with SessionLocal() as session:
-            user = session.query(User).filter_by(username=username).first()
-            if user and pwd.verify(password, user.hashed_password):
-                return user
-    except Exception as e:
-        return {"error": "Failed to auth"}
-    
-def create_access_token(sub: str) -> str:
-    to_encode = {
-        "sub": sub, 
-        "exp": datetime.now() + timedelta(minutes=ACCESS_MIN)
-    }
-    return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGO)
+@app.exception_handler(PatientValidationError)
+async def patient_validation_handler(request, exc: PatientValidationError):
+    return JSONResponse(status_code=422, content={"detail": exc.errors})
 
-async def get_current_user(token: str = Depends(oauth2_scheme)) -> User:
-    try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGO])
-        username: str = payload.get("sub")
-        if username is None:
-            raise HTTPException(status_code=401, detail="Invalid authentication credentials")
-    except JWTError:
-        raise HTTPException(status_code=401, detail="Invalid authentication credentials")   
-    with SessionLocal() as session:
-        user = session.query(User).filter_by(username=username).first()
-        if user is None:
-            raise HTTPException(status_code=401, detail="Invalid authentication credentials")
-        return user
-    
+
+@app.exception_handler(DuplicatePatientError)
+async def duplicate_patient_handler(request, exc: DuplicatePatientError):
+    return JSONResponse(status_code=409, content={"detail": str(exc)})
+
+
+# ── Routers ───────────────────────────────────────────────────────────────────
+app.include_router(dtw_router)
+app.include_router(patient_router)
+app.include_router(ws_router)
+app.include_router(classifier_router)
+app.include_router(media_router)
+
+
+# ── Auth ──────────────────────────────────────────────────────────────────────
 @app.post("/token")
 async def login(form: OAuth2PasswordRequestForm = Depends()):
     user = authenticate(form.username, form.password)
@@ -103,80 +65,46 @@ async def login(form: OAuth2PasswordRequestForm = Depends()):
     access_token = create_access_token(sub=user.username)
     return {"access_token": access_token, "token_type": "bearer"}
 
-# ============ REST: Health & Patients ============
+
+# ── Health ────────────────────────────────────────────────────────────────────
 @app.get("/")
 async def root():
     return {"message": "Welcome to the Patient Management API"}
+
 
 @app.get("/health")
 async def health_check():
     return {"status": "healthy", "message": "API is running"}
 
-# ============ REST: Test History ============
-@app.get("/patients/{patient_id}/tests", response_model=Dict)
-async def get_patient_tests(patient_id: str):
-    thm = TestHistoryManager()
-    tests = thm.get_patient_tests(patient_id)
-    return {"success": True, "tests": tests}
 
-@app.post("/patients/{patient_id}/tests", response_model=Dict)
-async def add_patient_test(patient_id: str, test_data: dict = Body(...)):
-    thm = TestHistoryManager()
-    thm.add_patient_test(patient_id, test_data)
-    return {"success": True}
-
-
-
-# ============ REST: Recordings ============
-# ============ REST: Recordings ============
-@app.post("/upload-video/")
-async def upload_video(
-    patient_id: str = Form(...),
-    test_name: str = Form(...),
-    video: UploadFile = File(...)
+# ── Test History ──────────────────────────────────────────────────────────────
+@app.get("/patients/{patient_id}/tests")
+async def get_patient_tests(
+    patient_id: str,
+    test_history: TestHistoryService = Depends(get_test_history_service),
 ):
-    try:
-        now_str = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-        filename = f"{patient_id}_{test_name}_{now_str}.mov"
-        filepath = os.path.join(RECORDINGS_DIR, filename)
-
-        with open(filepath, "wb") as buffer:
-            shutil.copyfileobj(video.file, buffer)
-
-        return {
-            "success": True,
-            "filename": filename,
-            "path": f"recordings/{filename}",
-            "patient_id": patient_id,
-            "test_name": test_name
+    tests = test_history.get_patient_tests(patient_id)
+    return {"tests": [
+        {
+            "test_name": t.test_name,
+            "date": t.test_date.isoformat() if t.test_date else None,
+            "recording_file": t.recording_file,
+            "frame_count": t.frame_count,
         }
-    except Exception as e:
-        return {"success": False, "error": str(e)}
+        for t in tests
+    ]}
 
-@app.get("/videos/{patient_id}/{test_name}", response_model=Dict)
-def list_videos(patient_id: str, test_name: str):
-    try:
-        files = os.listdir(RECORDINGS_DIR)
-        matching = [
-            f for f in files
-            if f.startswith(f"{patient_id}_{test_name}_") and (f.endswith(".mov") or f.endswith(".mp4"))
-        ]
-        matching.sort(
-            key=lambda f: os.path.getmtime(os.path.join(RECORDINGS_DIR, f)),
-            reverse=True
-        )
-        return {"success": True, "videos": matching}
-    except Exception as e:
-        return {"success": False, "error": str(e)}
 
-@app.get("/recordings/{filename}", response_class=FileResponse)
-def get_recording_file(filename: str):
-    file_path = os.path.join(RECORDINGS_DIR, filename)
-    if not os.path.exists(file_path):
-        raise HTTPException(status_code=404, detail="Video not found")
-    media_type = "video/mp4" if filename.endswith(".mp4") else "video/quicktime"
-    return FileResponse(file_path, media_type=media_type)
+@app.post("/patients/{patient_id}/tests")
+async def add_patient_test(
+    patient_id: str,
+    test_data: dict = Body(...),
+    test_history: TestHistoryService = Depends(get_test_history_service),
+):
+    test_history.add_patient_test(patient_id, test_data)
+    return {"patient_id": patient_id}
 
-# ============ Uvicorn ============
+
+# ── Entry point ───────────────────────────────────────────────────────────────
 if __name__ == "__main__":
     uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
