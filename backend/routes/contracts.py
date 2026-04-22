@@ -93,19 +93,19 @@ class PatientResponse(BaseModel):
 
 
 class PatientsListResponse(BaseModel):
-    success: bool
     patients: List[PatientResponse]
     total: int
     skip: int
     limit: int
 
+
 class PatientSearchResponse(BaseModel):
-    success: bool
     patients: List[PatientResponse]
     count: int
 
 class FilterCriteria(BaseModel):
     # Keep age filters if you want; you’ll compute DOB cutoffs server-side
+    name: Optional[str] = None
     min_age: Optional[int] = None
     max_age: Optional[int] = None
-    severity: Optional[str] 
+    severity: Optional[str] = None

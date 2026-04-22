@@ -116,15 +116,17 @@ class PatientRepository:
     def add_test_result(
         self,
         patient_id: str,
-        test_type: Optional[str],
-        test_date: Optional[date],
-        keypoints: Optional[str],
+        test_name: Optional[str],
+        test_date: Optional[datetime],
+        recording_file: Optional[str],
+        frame_count: Optional[int],
     ) -> TestResult:
         t = TestResult(
             patient_id=patient_id,
-            test_type=test_type,
+            test_name=test_name,
             test_date=test_date,
-            keypoints=keypoints,
+            recording_file=recording_file,
+            frame_count=frame_count,
         )
         self.session.add(t)
         self.session.commit()
@@ -153,19 +155,17 @@ class PatientRepository:
         name: Optional[str] = None,
         min_age: Optional[int] = None,
         max_age: Optional[int] = None,
-        severity: Optional[str] = None,  # lives in latest Visit.vitals_json["severity"]
+        severity: Optional[str] = None,  # lives in Patient.severity
         skip: int = 0,
         limit: int = 100,
     ) -> List[Patient]:
-        """
-        Note: severity is derived from the latest Visit per patient. We implement that
-        by first selecting candidate patients, then post-filtering by latest visit.
-        This keeps SQL portable and simple.
-        """
         q = self.session.query(Patient)
 
         if name:
             q = q.filter(Patient.name.ilike(f"%{name}%"))
+
+        if severity:
+            q = q.filter(Patient.severity == severity)
 
         # Age filters based on dob
         today = date.today()
@@ -176,23 +176,9 @@ class PatientRepository:
             cutoff = today - timedelta(days=int(max_age * 365.25))
             q = q.filter(Patient.dob >= cutoff)
 
-        candidates = (
+        return (
             q.order_by(Patient.name.asc().nulls_last())
             .offset(skip)
             .limit(limit)
             .all()
         )
-
-        if severity is None:
-            return candidates
-
-        # Post-filter by latest visit severity
-        filtered: List[Patient] = []
-        for p in candidates:
-            latest = self.latest_visit(p.patient_id)
-            sev = None
-            if latest and latest.vitals_json:
-                sev = latest.vitals_json.get("severity")
-            if sev == severity:
-                filtered.append(p)
-        return filtered
