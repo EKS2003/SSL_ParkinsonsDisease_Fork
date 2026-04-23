@@ -18,6 +18,7 @@ class User(Base):
     location: Mapped[str] = mapped_column(String(255), nullable = False)
     title: Mapped[str] = mapped_column(String(255), nullable = False)
     speciality: Mapped[str] = mapped_column(String(255), nullable = False)
+    profile_image: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
     # one user -> many patients
     patients: Mapped[List["Patient"]] = relationship(

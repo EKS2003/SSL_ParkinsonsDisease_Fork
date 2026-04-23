@@ -65,6 +65,8 @@ class PatientUpdate(BaseModel):
     weight: Optional[Union[float, str]] = None
     lab_results: Optional[LabResultIn] = None
     doctors_notes: Optional[DoctorNoteIn] = None
+    lab_results_history: Optional[List[LabResultIn]] = None
+    doctors_notes_history: Optional[List[DoctorNoteIn]] = None
     severity: Optional[str] = None
 
     @field_validator("height", "weight", mode="before")
@@ -93,19 +95,19 @@ class PatientResponse(BaseModel):
 
 
 class PatientsListResponse(BaseModel):
-    success: bool
     patients: List[PatientResponse]
     total: int
     skip: int
     limit: int
 
+
 class PatientSearchResponse(BaseModel):
-    success: bool
     patients: List[PatientResponse]
     count: int
 
 class FilterCriteria(BaseModel):
     # Keep age filters if you want; you’ll compute DOB cutoffs server-side
+    name: Optional[str] = None
     min_age: Optional[int] = None
     max_age: Optional[int] = None
-    severity: Optional[str] 
+    severity: Optional[str] = None

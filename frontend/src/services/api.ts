@@ -1,4 +1,5 @@
 import { AVAILABLE_TESTS, Test, TestIndicator } from '@/types/patient';
+import { calculateAge } from '@/lib/utils';
 
 const API_BASE_URL = '/api'; // routed through Vite proxy (/api → backend root); works locally and in Docker
 
@@ -56,27 +57,10 @@ export function normalizeBirthDate(value: string): string {
   return `${year}-${month}-${day}`;
 }
 
-//remove later
-const calculateAge = (birthDate: string): number => {
-  const normalized = normalizeBirthDate(birthDate);
-  if (!normalized) return 0;
-
-  const [yearStr, monthStr, dayStr] = normalized.split('-');
-  const year = Number(yearStr);
-  const month = Number(monthStr);
-  const day = Number(dayStr);
-
-  if (!year || !month || !day) return 0;
-
-  const today = new Date();
-  let age = today.getFullYear() - year;
-  const monthDiff = today.getMonth() + 1 - month;
-
-  if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < day)) {
-    age--;
-  }
-  
-  return Math.max(0, age);
+const ensureISODate = (value: unknown): string => {
+  if (value instanceof Date) return value.toISOString();
+  const parsed = new Date(value as string);
+  return Number.isNaN(parsed.getTime()) ? new Date().toISOString() : parsed.toISOString();
 };
 
 // Types for backend API
@@ -393,12 +377,6 @@ const convertFrontendToBackend = (frontendPatient: any): BackendPatientCreate =>
   const heightStr = (frontendPatient.height || '').replace(/[^\d.]/g, '');
   const weightStr = (frontendPatient.weight || '').replace(/[^\d.]/g, '');
   const normalizedBirthDate = normalizeBirthDate(frontendPatient.birthDate);
-  
-  const ensureISODate = (value: any): string => {
-    if (value instanceof Date) return value.toISOString();
-    const parsed = new Date(value);
-    return Number.isNaN(parsed.getTime()) ? new Date().toISOString() : parsed.toISOString();
-  };
 
   const labResultsHistory: BackendLabResultEntry[] = (frontendPatient.labResultsHistory || []).map((entry: any) => ({
     id: entry.id,
@@ -494,28 +472,96 @@ class ApiService {
     this.baseUrl = baseUrl;
   }
 
+  getToken(): string | null {
+    return localStorage.getItem('auth_token');
+  }
+
+  private setToken(token: string): void {
+    localStorage.setItem('auth_token', token);
+  }
+
+  logout(): void {
+    localStorage.removeItem('auth_token');
+  }
+
+  async login(email: string, password: string): Promise<ApiResponse<{ access_token: string }>> {
+    try {
+      const body = new URLSearchParams({ username: email, password });
+      const response = await fetch(`${this.baseUrl}/token`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: body.toString(),
+      });
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({}));
+        throw new Error(err.detail || `HTTP ${response.status}`);
+      }
+      const data = await response.json();
+      this.setToken(data.access_token);
+      return { success: true, data };
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : 'Login failed' };
+    }
+  }
+
+  async register(userData: {
+    email: string;
+    password: string;
+    fullName: string;
+    location?: string;
+    title: string;
+    speciality: string;
+  }): Promise<ApiResponse<{ access_token: string }>> {
+    try {
+      const response = await fetch(`${this.baseUrl}/register`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: userData.email,
+          password: userData.password,
+          full_name: userData.fullName,
+          location: userData.location ?? '',
+          title: userData.title,
+          speciality: userData.speciality,
+        }),
+      });
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({}));
+        throw new Error(err.detail || `HTTP ${response.status}`);
+      }
+      const data = await response.json();
+      this.setToken(data.access_token);
+      return { success: true, data };
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : 'Registration failed' };
+    }
+  }
+
   private async request<T>(
     endpoint: string,
     options: RequestInit = {}
   ): Promise<ApiResponse<T>> {
     try {
       const url = `${this.baseUrl}${endpoint}`;
+      const token = this.getToken();
 
       const response = await fetch(url, {
         headers: {
           "Content-Type": "application/json",
+          ...(token ? { "Authorization": `Bearer ${token}` } : {}),
           ...options.headers,
         },
         ...options,
       });
 
+      if (response.status === 401) {
+        this.logout();
+        window.location.href = '/login';
+        return { success: false, error: 'Session expired. Please log in again.' };
+      }
+
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
-        console.error("API Error Response:", errorData);
-        console.error("Error Response Type:", typeof errorData);
-        console.error("Error Detail Type:", typeof errorData.detail);
-        console.error("Full Error Object:", JSON.stringify(errorData, null, 2));
-
         let errorMessage = `HTTP error! status: ${response.status}`;
 
         if (errorData.detail) {
@@ -543,12 +589,35 @@ class ApiService {
       const data = await response.json();
       return { success: true, data };
     } catch (error) {
-      console.error("API request failed:", error);
       return {
         success: false,
-        error:
-          error instanceof Error ? error.message : "Unknown error occurred",
+        error: error instanceof Error ? error.message : "Unknown error occurred",
       };
+    }
+  }
+
+  async getMe(): Promise<ApiResponse<{ email: string; full_name: string; title: string; speciality: string; location: string; profile_image: string }>> {
+    return this.request('/me');
+  }
+
+  async uploadAvatar(file: File): Promise<ApiResponse<{ profile_image: string }>> {
+    const token = this.getToken();
+    const form = new FormData();
+    form.append('file', file);
+    try {
+      const response = await fetch(`${this.baseUrl}/me/avatar`, {
+        method: 'PUT',
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        body: form,
+      });
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({}));
+        throw new Error(err.detail || `HTTP ${response.status}`);
+      }
+      const data = await response.json();
+      return { success: true, data };
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : 'Upload failed' };
     }
   }
 
@@ -613,8 +682,6 @@ class ApiService {
   ): Promise<ApiResponse<any>> {
     const backendData: BackendPatientUpdate = {};
 
-    console.log("Update patient input data:", updateData);
-
     if (updateData.firstName || updateData.lastName) {
       const fullName = `${updateData.firstName || ""} ${
         updateData.lastName || ""
@@ -625,7 +692,7 @@ class ApiService {
     if (updateData.birthDate !== undefined) {
       const normalized = normalizeBirthDate(updateData.birthDate);
       backendData.birthDate = normalized || updateData.birthDate;
-      backendData.age = calculateAge(normalized || updateData.birthDate); // Use your existing function
+      backendData.age = calculateAge(normalized || updateData.birthDate);
     }
     
     if (updateData.height) {
@@ -636,11 +703,6 @@ class ApiService {
       const weightStr = updateData.weight.replace(/[^\d.]/g, "");
       backendData.weight = weightStr || "0";
     }
-    const ensureISODate = (value: any): string => {
-      if (value instanceof Date) return value.toISOString();
-      const parsed = new Date(value);
-      return Number.isNaN(parsed.getTime()) ? new Date().toISOString() : parsed.toISOString();
-    };
 
     if (updateData.labResultsHistory) {
       backendData.lab_results_history = updateData.labResultsHistory.map((entry: any) => ({
@@ -674,26 +736,8 @@ class ApiService {
       }];
     }
     if (updateData.severity) {
-      const mappedSeverity = updateData.severity;
-      console.log(
-        "Severity mapping:",
-        updateData.severity,
-        "->",
-        mappedSeverity
-      );
-      backendData.severity = mappedSeverity;
+      backendData.severity = updateData.severity;
     }
-
-          console.log('Backend update data:', backendData);
-          console.log('Data types:', {
-            name: typeof backendData.name,
-            birthDate: typeof backendData.birthDate,
-            height: typeof backendData.height,
-            weight: typeof backendData.weight,
-            severity: typeof backendData.severity
-        });
-
-
 
     const response = await this.request<BackendPatient>(
       `/patients/${patientId}`,

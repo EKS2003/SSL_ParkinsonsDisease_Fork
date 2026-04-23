@@ -6,17 +6,18 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2, Lock, Mail, Check, X} from 'lucide-react';
+import apiService from '@/services/api';
 
 const Register = () => {
   const navigate = useNavigate();
+  const { toast } = useToast();
 
-  //take all in as a string
-  const [firstName, setFirstName] = useState(''); //combine to first and lat to make full name
+  const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [location, setLocation] = useState('');
-  const [title, setTitle] = useState(''); //maybe can be switched to a role
+  const [title, setTitle] = useState('');
   const [department, setDepartment] = useState('');
   const [specialty, setSpecialty] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -26,13 +27,23 @@ const Register = () => {
     setIsLoading(true);
 
     try {
-        //simulates a api call, need to send to backend
-        await new Promise((resolve) => resolve(1));
-        navigate('/patients');
+      const result = await apiService.register({
+        email,
+        password,
+        fullName: `${firstName} ${lastName}`.trim(),
+        location,
+        title,
+        speciality: specialty,
+      });
+      if (result.success) {
+        navigate('/');
+      } else {
+        toast({ title: 'Registration failed', description: result.error, variant: 'destructive' });
+      }
     } catch (error) {
-        console.error('Login failed', error);
+      console.error('Registration failed', error);
     } finally {
-        setIsLoading(false);
+      setIsLoading(false);
     }
   };
 
@@ -127,6 +138,7 @@ const Register = () => {
                     placeholder='••••••••'
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
+                    maxLength={72}
                     required
                   />
                   {(

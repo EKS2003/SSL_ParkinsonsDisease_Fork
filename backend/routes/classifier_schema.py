@@ -23,14 +23,12 @@ class LSTMCNNPredictRequest(BaseModel):
             raise ValueError("sequence must not be empty")
         if len(value) < 30:
             raise ValueError("sequence length must be at least 30")
-
         for i, frame in enumerate(value):
             if len(frame) != 24:
                 raise ValueError(f"frame {i} must have exactly 24 features")
             for j, feature in enumerate(frame):
                 if not math.isfinite(feature):
                     raise ValueError(f"feature at frame {i}, index {j} is NaN or infinite")
-
         return value
 
 

@@ -12,7 +12,7 @@ from pydantic import BaseModel, Field, field_validator
 router = APIRouter(prefix="/dtw", tags=["dtw"])
 
 # Point to {project}/backend
-PROJECT_BACKEND = Path(__file__).resolve().parent               # .../project/backend
+PROJECT_BACKEND = Path(__file__).resolve().parent.parent        # .../project/backend
 DTW_BASE        = (PROJECT_BACKEND / "dtw_runs").resolve()
 DTW_BASE.mkdir(parents=True, exist_ok=True)
 
@@ -98,13 +98,17 @@ def lookup_session(session_id: str) -> Dict[str, str]:
 
 @router.get("/sessions/{test_name}")
 def list_sessions(test_name: str) -> List[Dict[str, Any]]:
-    root = _test_dir(test_name)
+    p = DTW_BASE / test_name
+    if not p.is_dir():
+        return []
+    root = p
     out: List[Dict[str, Any]] = []
     for d in sorted(root.iterdir()):
         if not d.is_dir():
             continue
         meta_path = d / "meta.json"
-        if not meta_path.is_file():
+        npz_path = d / "dtw_artifacts.npz"
+        if not meta_path.is_file() or not npz_path.is_file():
             continue
         try:
             meta = json.loads(meta_path.read_text())

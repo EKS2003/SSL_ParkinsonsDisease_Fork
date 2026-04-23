@@ -6,9 +6,11 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2, Lock, Mail } from 'lucide-react';
+import apiService from '@/services/api';
 
 const Login = () => {
   const navigate = useNavigate();
+  const { toast } = useToast();
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -19,13 +21,16 @@ const Login = () => {
     setIsLoading(true);
 
     try {
-        //simulates a api call, need to send to backend
-        await new Promise((resolve) => resolve(1));
-        navigate('/patients');
+      const result = await apiService.login(email, password);
+      if (result.success) {
+        navigate('/');
+      } else {
+        toast({ title: 'Login failed', description: result.error, variant: 'destructive' });
+      }
     } catch (error) {
-        console.error('Login failed', error);
+      console.error('Login failed', error);
     } finally {
-        setIsLoading(false);
+      setIsLoading(false);
     }
   };
 

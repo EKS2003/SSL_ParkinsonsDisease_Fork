@@ -1,5 +1,7 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useAuth, useAuthRefresh } from '@/contexts/AuthContext';
+import apiService from '@/services/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -13,47 +15,58 @@ const Profile = () => {
   const { toast } = useToast();
   const navigate = useNavigate();
   const fileInputRef = useRef<HTMLInputElement>(null);
-  
+  const currentUser = useAuth();
+  const refreshAuth = useAuthRefresh();
+
   const [isEditing, setIsEditing] = useState(false);
-  const [profileImage, setProfileImage] = useState<string>('');
+  const [profileImage, setProfileImage] = useState<string>(currentUser?.profileImage ?? '');
   const [userData, setUserData] = useState({
-    // Mock user data, replace with actual data from your auth context/API
-    firstName: 'John',
-    lastName: 'Doe',
-    email: 'john.doe@hospital.com',
-    department: 'Neurology',
-    specialty: 'Movement Disorders',
-    title: 'MD, PhD',
-    location: 'Boston, MA',
+    firstName: '',
+    lastName: '',
+    email: '',
+    department: '',
+    specialty: '',
+    title: '',
+    location: '',
   });
 
   const [editedData, setEditedData] = useState(userData);
+
+  useEffect(() => {
+    if (!currentUser) return;
+    const parts = (currentUser.fullName || '').split(' ');
+    const loaded = {
+      firstName: parts[0] || '',
+      lastName: parts.slice(1).join(' ') || '',
+      email: currentUser.email || '',
+      department: '',
+      specialty: currentUser.speciality || '',
+      title: currentUser.title || '',
+      location: currentUser.location || '',
+    };
+    setUserData(loaded);
+    setEditedData(loaded);
+    setProfileImage(currentUser.profileImage || '');
+  }, [currentUser]);
 
   const handleImageClick = () => {
     fileInputRef.current?.click();
   };
 
-  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImageChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) {
-      if (file.size > 5 * 1024 * 1024) { // 5MB limit
-        toast({
-          title: 'File too large',
-          description: 'Please select an image smaller than 5MB',
-          variant: 'destructive',
-        });
-        return;
-      }
-
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setProfileImage(reader.result as string);
-        toast({
-          title: 'Profile picture updated',
-          description: 'Your profile picture has been changed successfully',
-        });
-      };
-      reader.readAsDataURL(file);
+    if (!file) return;
+    if (file.size > 5 * 1024 * 1024) {
+      toast({ title: 'File too large', description: 'Please select an image smaller than 5MB', variant: 'destructive' });
+      return;
+    }
+    const res = await apiService.uploadAvatar(file);
+    if (res.success && res.data) {
+      setProfileImage(res.data.profile_image);
+      await refreshAuth();
+      toast({ title: 'Profile picture updated', description: 'Your profile picture has been saved' });
+    } else {
+      toast({ title: 'Upload failed', description: res.error ?? 'Could not save image', variant: 'destructive' });
     }
   };
 
@@ -82,7 +95,7 @@ const Profile = () => {
   };
 
   const getInitials = () => {
-    return `${userData.firstName[0]}${userData.lastName[0]}`.toUpperCase();
+    return `${(userData.firstName || '?')[0]}${(userData.lastName || '?')[0]}`.toUpperCase();
   };
 
   return (
@@ -121,7 +134,7 @@ const Profile = () => {
               <div className="relative">
                 <Avatar className="h-32 w-32">
                   <AvatarImage src={profileImage} alt="Profile picture" />
-                  <AvatarFallback className="text-2xl">{getInitials()}</AvatarFallback> {/*Sets avatar to initals for no avatar*/}
+                  <AvatarFallback className="text-2xl">{getInitials()}</AvatarFallback>
                 </Avatar>
                 <button
                   onClick={handleImageClick}
