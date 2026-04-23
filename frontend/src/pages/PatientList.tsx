@@ -15,6 +15,7 @@ import { Patient, DoctorNoteEntry } from '@/types/patient';
 import apiService, { normalizeBirthDate } from '@/services/api';
 import { useApiStatus } from '@/hooks/use-api-status';
 import { getSeverityColor, calculateAge } from '@/lib/utils';
+import { useAuth } from '@/contexts/AuthContext';
 
 // Remove mock data - will be fetched from API
 
@@ -88,6 +89,7 @@ const resolvePrimaryPhysician = (patient: Patient): string => {
 
 const PatientList = () => {
   const navigate = useNavigate();
+  const currentUser = useAuth();
   const [searchTerm, setSearchTerm] = useState('');
   const [patients, setPatients] = useState<Patient[]>([]);
   const [loading, setLoading] = useState(true);
@@ -95,15 +97,11 @@ const PatientList = () => {
   const { toast } = useToast();
   const { isConnected, isChecking } = useApiStatus();
 
-  // Mock user data - replace with actual user data from auth context
-  const [currentUser] = useState({
-    firstName: 'John',
-    lastName: 'Doe',
-    profileImage: '', // Add actual profile image URL if available
-  });
-
   const getUserInitials = () => {
-    return `${currentUser.firstName[0]}${currentUser.lastName[0]}`.toUpperCase();
+    const parts = (currentUser?.fullName || '').split(' ').filter(Boolean);
+    const first = parts[0]?.[0] ?? '?';
+    const last = parts[1]?.[0] ?? '?';
+    return `${first}${last}`.toUpperCase();
   };
 
   const [sortField, setSortField] = useState<SortField>('lastName');
@@ -128,10 +126,7 @@ const PatientList = () => {
     setLoading(true);
     try {
       const response = await apiService.getPatients();
-      console.log('PatientList API Response:', response);
       if (response.success && response.data) {
-        console.log('Patient data received:', response.data);
-        console.log('First patient historical data:', response.data[0]?.doctorNotesHistory, response.data[0]?.labResultsHistory);
         setPatients(response.data);
       } else {
         toast({
@@ -567,10 +562,7 @@ const PatientList = () => {
     };
 
     try {
-      console.log('Creating patient with data:', newPatientData);
       const response = await apiService.createPatient(newPatientData);
-      console.log('API response:', response);
-      
       if (response.success && response.data) {
         setPatients(prev => [...prev, response.data]);
         setIsModalOpen(false);
@@ -631,7 +623,7 @@ const PatientList = () => {
                 aria-label="View profile"
               >
                 <Avatar className="h-10 w-10 cursor-pointer ring-2 ring-transparent hover:ring-primary transition-all">
-                  <AvatarImage src={currentUser.profileImage} alt="Profile" />
+                  <AvatarImage src={currentUser?.profileImage} alt="Profile" />
                   <AvatarFallback className="bg-primary text-primary-foreground text-sm">
                     {getUserInitials()}
                   </AvatarFallback>

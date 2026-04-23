@@ -53,6 +53,7 @@ import {
   Label,
   Customized,
 } from "recharts";
+import { Label as FormLabel } from "@/components/ui/label";
 import { Test } from "@/types/patient";
 
 /* ========= Backend base URL for video + APIs =========
@@ -173,11 +174,17 @@ const normalizeTestKey = (t?: string | null): CanonicalTest | null => {
   return isCanonical(s) ? (s as CanonicalTest) : null;
 };
 
+class FetchError extends Error {
+  constructor(message: string, public status: number) {
+    super(message);
+  }
+}
+
 async function fetchJSON<T>(url: string, signal?: AbortSignal): Promise<T> {
   const res = await fetch(url, { signal });
   if (!res.ok) {
     const text = await res.text().catch(() => "");
-    throw new Error(text || `HTTP ${res.status}`);
+    throw new FetchError(text || `HTTP ${res.status}`, res.status);
   }
   return res.json();
 }
@@ -594,14 +601,6 @@ const VideoSummary = () => {
       ? `${API_BASE}/recordings/${encodeURIComponent(normalizedVideoName)}`
       : null;
 
-  useEffect(() => {
-    if (normalizedVideoName && videoSrc) {
-      // This helps you see in DevTools exactly what URL is being used
-      // and what filename the backend thinks you're requesting.
-      console.log("Selected video:", normalizedVideoName);
-      console.log("Video src URL:", videoSrc);
-    }
-  }, [normalizedVideoName, videoSrc]);
 
   // Resolve route: testId may be a test type OR a session id
   useEffect(() => {
@@ -656,7 +655,6 @@ const VideoSummary = () => {
           `/api/videos/${encodeURIComponent(id)}/${encodeURIComponent(testKey)}`,
           ctrl.signal
         );
-        console.log("Videos API response:", data);
         if (data.success && data.videos?.length > 0) {
           setVideoList(data.videos);
           setSelectedVideo(data.videos[0]);
@@ -664,8 +662,7 @@ const VideoSummary = () => {
           setVideoList([]);
           setSelectedVideo(null);
         }
-      } catch (e) {
-        console.error("Error fetching videos:", e);
+      } catch {
         setVideoList([]);
         setSelectedVideo(null);
       }
@@ -716,7 +713,11 @@ const VideoSummary = () => {
 
       } catch (e: any) {
         setMetrics(null);
-        setMetricsErr(e?.message || "Failed to load DTW metrics");
+        setMetricsErr(
+          e instanceof FetchError && e.status === 404
+            ? "No analysis data available for this session. Run a new test to generate results."
+            : (e?.message || "Failed to load DTW metrics")
+        );
       } finally {
         setMetricsLoading(false);
       }
@@ -743,7 +744,11 @@ const VideoSummary = () => {
         setMlPrediction(data);
       } catch (e: any) {
         setMlPrediction(null);
-        setMlErr(e?.message || "ML prediction unavailable");
+        setMlErr(
+          e instanceof FetchError && e.status === 404
+            ? "No analysis data available for this session. Run a new test to generate results."
+            : (e?.message || "ML prediction unavailable")
+        );
       } finally {
         setMlLoading(false);
       }
@@ -1169,7 +1174,7 @@ const VideoSummary = () => {
 
               {/* Stage selector */}
               <div className="space-y-1.5">
-                <Label htmlFor="stage-select">Confirmed UPDRS Stage</Label>
+                <FormLabel htmlFor="stage-select">Confirmed UPDRS Stage</FormLabel>
                 <Select
                   value={String(labelStage)}
                   onValueChange={(v) => setLabelStage(Number(v))}
@@ -1192,10 +1197,10 @@ const VideoSummary = () => {
 
               {/* Optional notes */}
               <div className="space-y-1.5">
-                <Label htmlFor="label-notes">
+                <FormLabel htmlFor="label-notes">
                   Clinical notes{" "}
                   <span className="font-normal text-muted-foreground">(optional)</span>
-                </Label>
+                </FormLabel>
                 <Textarea
                   id="label-notes"
                   placeholder="e.g. Patient showed mild tremor, AI over-estimated severity…"

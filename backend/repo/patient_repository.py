@@ -76,6 +76,24 @@ class PatientRepository:
         self.session.commit()
         self.session.refresh(lr)
         return lr
+
+    def upsert_lab_result(
+        self,
+        lab_id: str,
+        patient_id: str,
+        result_date: date | None,
+        results: str | None,
+        added_by: str | None,
+    ) -> LabResult:
+        lr = LabResult(
+            lab_id=lab_id,
+            patient_id=patient_id,
+            result_date=result_date,
+            results=results,
+            added_by=added_by,
+        )
+        self.session.merge(lr)
+        return lr
     
     def list_lab_results(self, patient_id: str) -> List[LabResult]:
         return (
@@ -103,6 +121,24 @@ class PatientRepository:
         self.session.add(doc_note)
         self.session.commit()
         return doc_note
+
+    def upsert_doctor_note(
+        self,
+        note_id: str,
+        patient_id: str,
+        note_date: Optional[date],
+        note: Optional[str],
+        added_by: Optional[str],
+    ) -> DoctorNote:
+        dn = DoctorNote(
+            note_id=note_id,
+            patient_id=patient_id,
+            note_date=note_date,
+            note=note,
+            added_by=added_by,
+        )
+        self.session.merge(dn)
+        return dn
     
     def list_doctor_notes(self, patient_id: str) -> List[DoctorNote]:
         return (

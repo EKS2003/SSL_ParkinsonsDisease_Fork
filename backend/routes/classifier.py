@@ -19,7 +19,7 @@ from services.patient_service import PatientService
 from services.lstm_cnn_inference import inference_service
 
 # DTW runs root — same path used by utils_dtw.py
-_DTW_BASE = (Path(__file__).resolve().parent / "dtw_runs").resolve()
+_DTW_BASE = (Path(__file__).resolve().parent.parent / "dtw_runs").resolve()
 
 # Hand landmark indices used to build the (T,24) sequence for the ML model.
 # 8 landmarks × (x, y from DTW) + z=0  →  8×3 = 24 features

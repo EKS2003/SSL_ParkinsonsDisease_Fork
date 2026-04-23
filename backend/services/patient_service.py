@@ -235,20 +235,24 @@ class PatientService:
         if "severity" in raw:
             dbp.severity = raw["severity"]
 
-        if data.lab_results is not None:
-            lr = data.lab_results
-            self.repo.add_lab_result(
-                lab_id=lr.id,
+        history_labs = data.lab_results_history
+        if not history_labs and data.lab_results is not None:
+            history_labs = [data.lab_results]
+        for lr in (history_labs or []):
+            self.repo.upsert_lab_result(
+                lab_id=lr.id or f"lab_{uuid.uuid4().hex[:8]}",
                 patient_id=patient_id,
                 result_date=lr.date or datetime.now(),
                 results=lr.results or "",
                 added_by=lr.added_by or "system",
             )
 
-        if data.doctors_notes is not None:
-            dn = data.doctors_notes
-            self.repo.add_doctor_note(
-                note_id=dn.id,
+        history_notes = data.doctors_notes_history
+        if not history_notes and data.doctors_notes is not None:
+            history_notes = [data.doctors_notes]
+        for dn in (history_notes or []):
+            self.repo.upsert_doctor_note(
+                note_id=dn.id or f"note_{uuid.uuid4().hex[:8]}",
                 patient_id=patient_id,
                 note_date=dn.date or datetime.now(),
                 note=dn.note or "",

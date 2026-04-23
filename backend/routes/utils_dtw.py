@@ -11,7 +11,7 @@ import numpy as np
 from tslearn.metrics import dtw_path
 
 # ================== BASE PATHS (match your repo layout) ==================
-PROJECT_BACKEND = Path(__file__).resolve().parent               # .../project/backend
+PROJECT_BACKEND = Path(__file__).resolve().parent.parent        # .../project/backend
 TEMPLATES_ROOT  = (PROJECT_BACKEND / "templates").resolve()     # .../backend/templates
 DTW_BASE        = (PROJECT_BACKEND / "dtw_runs").resolve()      # .../backend/dtw_runs
 TEMPLATES_ROOT.mkdir(parents=True, exist_ok=True)

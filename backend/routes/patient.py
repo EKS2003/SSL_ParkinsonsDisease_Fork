@@ -16,14 +16,14 @@ from services.patient_service import PatientService
 router = APIRouter(prefix="/patients")
 
 
-@router.post("/", response_model=Dict)
+@router.post("/", response_model=PatientResponse, status_code=201)
 async def create_patient(
     patient: PatientCreate,
     service: PatientService = Depends(get_patient_service),
     current_user: User = Depends(get_current_user),
 ):
     patient_id = service.create_patient(user_id=current_user.id, data=patient)
-    return {"patient_id": patient_id}
+    return service.get_patient(patient_id)
 
 
 @router.get("/", response_model=PatientsListResponse)
@@ -43,20 +43,22 @@ async def get_patient(
     return service.get_patient(patient_id)
 
 
-@router.put("/{patient_id}", response_model=Dict)
+@router.put("/{patient_id}", response_model=PatientResponse)
 async def update_patient(
     patient_id: str,
     patient_update: PatientUpdate,
     service: PatientService = Depends(get_patient_service),
+    current_user: User = Depends(get_current_user),
 ):
     service.update_patient(patient_id, patient_update)
-    return {"patient_id": patient_id}
+    return service.get_patient(patient_id)
 
 
 @router.delete("/{patient_id}", response_model=Dict)
 async def delete_patient(
     patient_id: str,
     service: PatientService = Depends(get_patient_service),
+    current_user: User = Depends(get_current_user),
 ):
     service.delete_patient(patient_id)
     return {"patient_id": patient_id}

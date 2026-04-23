@@ -65,6 +65,8 @@ class PatientUpdate(BaseModel):
     weight: Optional[Union[float, str]] = None
     lab_results: Optional[LabResultIn] = None
     doctors_notes: Optional[DoctorNoteIn] = None
+    lab_results_history: Optional[List[LabResultIn]] = None
+    doctors_notes_history: Optional[List[DoctorNoteIn]] = None
     severity: Optional[str] = None
 
     @field_validator("height", "weight", mode="before")
